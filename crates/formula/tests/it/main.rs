@@ -2,4 +2,5 @@
 
 mod adjust_oracle;
 mod printer_roundtrip;
+mod portuguese_input;
 mod spanish_input;
