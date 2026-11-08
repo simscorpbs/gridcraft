@@ -963,12 +963,126 @@ pub fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
         let _ = std::fs::remove_file(&tmp);
         EngineError::Other(format!("{path}: {e}"))
     })?;
-    std::fs::rename(&tmp, path).map_err(|e| {
+    // Rename onto the file's real on-disk name (case included), retrying briefly while an
+    // antivirus scan, OneDrive or another app holds the target open.
+    let target = real_disk_path(path);
+    rename_with_retry(&tmp, &target, &mut |a, b| std::fs::rename(a, b), RENAME_ATTEMPTS, std::time::Duration::from_millis(RENAME_DELAY_MS)).map_err(|e| {
         // A write or rename that fails (full disk, the workbook locked by another app) leaves
         // no temporary file beside the user's workbook.
         let _ = std::fs::remove_file(&tmp);
         EngineError::Other(format!("{path}: {e}"))
     })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+const RENAME_ATTEMPTS: u32 = 6;
+#[cfg(not(target_arch = "wasm32"))]
+const RENAME_DELAY_MS: u64 = 60;
+
+/// A lock held by a scanner or sync client: sharing violation, lock violation or access denied
+/// on Windows, a plain permission error elsewhere. These clear up in moments; anything else won't.
+#[cfg(not(target_arch = "wasm32"))]
+fn is_transient_lock(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::PermissionDenied || matches!(e.raw_os_error(), Some(5 | 32 | 33))
+}
+
+/// Runs `rename(from, to)`, retrying up to `attempts` times with a growing pause while the
+/// failure looks like a transient lock; the last error is returned once the tries run out.
+#[cfg(not(target_arch = "wasm32"))]
+fn rename_with_retry(
+    from: &str,
+    to: &str,
+    rename: &mut dyn FnMut(&str, &str) -> std::io::Result<()>,
+    attempts: u32,
+    delay: std::time::Duration,
+) -> std::io::Result<()> {
+    let mut tried = 1;
+    loop {
+        match rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(e) if tried < attempts && is_transient_lock(&e) => {
+                std::thread::sleep(delay * tried);
+                tried += 1;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// The path as the file system spells it: an existing file keeps the name and case it has on
+/// disk (saving as `book.XLSX` over `Book.xlsx` must not create a second, differently cased
+/// entry or fail on a case-insensitive volume). A path that isn't there yet is used as given.
+#[cfg(not(target_arch = "wasm32"))]
+fn real_disk_path(path: &str) -> String {
+    let p = std::path::Path::new(path);
+    let (Some(dir), Some(name)) = (p.parent(), p.file_name()) else { return path.to_string() };
+    let dir = if dir.as_os_str().is_empty() { std::path::Path::new(".") } else { dir };
+    let Ok(entries) = std::fs::read_dir(dir) else { return path.to_string() };
+    let mut folded = None;
+    for entry in entries.flatten() {
+        let found = entry.file_name();
+        if found == name {
+            return path.to_string();
+        }
+        if cfg!(any(windows, target_os = "macos")) && folded.is_none() && found.to_string_lossy().to_lowercase() == name.to_string_lossy().to_lowercase() {
+            folded = Some(found);
+        }
+    }
+    match folded {
+        Some(found) => p.with_file_name(found).to_string_lossy().into_owned(),
+        None => path.to_string(),
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod save_retry_tests {
+    use super::*;
+    use std::io::{Error, ErrorKind};
+    use std::time::Duration;
+
+    #[test]
+    fn rename_retries_a_locked_target_then_succeeds() {
+        let mut calls = 0;
+        let r = rename_with_retry("a", "b", &mut |_, _| {
+            calls += 1;
+            if calls < 3 { Err(Error::from_raw_os_error(32)) } else { Ok(()) }
+        }, 5, Duration::from_millis(1));
+        assert!(r.is_ok());
+        assert_eq!(calls, 3);
+    }
+
+    #[test]
+    fn rename_fails_cleanly_after_the_retries() {
+        let mut calls = 0;
+        let r = rename_with_retry("a", "b", &mut |_, _| { calls += 1; Err(Error::from(ErrorKind::PermissionDenied)) }, 4, Duration::from_millis(1));
+        assert!(r.is_err());
+        assert_eq!(calls, 4);
+    }
+
+    #[test]
+    fn rename_does_not_retry_other_errors() {
+        let mut calls = 0;
+        let r = rename_with_retry("a", "b", &mut |_, _| { calls += 1; Err(Error::from(ErrorKind::NotFound)) }, 4, Duration::from_millis(1));
+        assert!(r.is_err());
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn write_file_keeps_the_existing_case_and_leaves_no_temp_file() {
+        let dir = std::env::temp_dir().join(format!("gc_save_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let real = dir.join("Book.xlsx");
+        std::fs::write(&real, b"old").unwrap();
+        let asked = dir.join("book.xlsx");
+        write_file(asked.to_str().unwrap(), b"new").unwrap();
+        let names: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names.len(), 1, "{names:?}");
+        if cfg!(any(windows, target_os = "macos")) {
+            assert_eq!(names[0], "Book.xlsx");
+        }
+        assert_eq!(std::fs::read(dir.join(&names[0])).unwrap(), b"new");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(target_arch = "wasm32")]

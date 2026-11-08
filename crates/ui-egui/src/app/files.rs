@@ -112,7 +112,11 @@ impl SheetApp {
         if autosave_due {
             self.grid.last_autosave = now;
             self.store_view_state();
-            let _ = self.session.run("file.save", json!({}));
+            // A failed AutoSave (file locked, disk full) is shown, not dropped: the workbook stays
+            // dirty and the next tick tries again.
+            if let Err(e) = self.session.run("file.save", json!({})) {
+                self.toast = Some((format!("AutoSave failed: {}", crate::clean_error(&e)), crate::now_ms()));
+            }
         } else if self.ui.autosave && dirty_xlsx {
             // Keep checking even when no input arrives while the window is hidden.
             ctx.request_repaint_after(std::time::Duration::from_secs(2));
