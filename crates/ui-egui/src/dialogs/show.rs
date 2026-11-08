@@ -19,6 +19,18 @@ use gridcraft_engine::model::PageOrder;
 /// The parameters OK sends to the dialog's command: its field values, reshaped per dialog.
 /// Unchanged hyperlink display text is omitted so its number or formula stays intact.
 pub(crate) fn build_params(d: &Dialog) -> Json {
+    build_params_in(d, gridcraft_engine::formula::FormulaLocale::En)
+}
+
+/// A number typed in a dialog field: the interface language's decimal separator is accepted as
+/// well as a dot, so `1,5` reads as 1.5 under Portuguese or Spanish. `None` if it isn't a finite number.
+pub(crate) fn parse_decimal(text: &str, locale: gridcraft_engine::formula::FormulaLocale) -> Option<f64> {
+    let d = text.trim().replace(locale.decimal_separator(), ".").parse::<f64>().ok()?;
+    d.is_finite().then_some(d)
+}
+
+/// [`build_params`] with number fields read under the interface language's decimal separator.
+pub(crate) fn build_params_in(d: &Dialog, locale: gridcraft_engine::formula::FormulaLocale) -> Json {
     let mut v = Json::Object(d.values.clone());
     match d.name.as_str() {
         "insertLink" => {
@@ -92,7 +104,7 @@ pub(crate) fn build_params(d: &Dialog) -> Json {
             }
         }
         "series" => {
-            if let Some(s) = d.values.get("stop").and_then(Json::as_str).and_then(|s| s.parse::<f64>().ok()) {
+            if let Some(s) = d.values.get("stop").and_then(Json::as_str).and_then(|s| parse_decimal(s, locale)) {
                 v["stop"] = json!(s);
             } else if let Some(m) = v.as_object_mut() {
                 m.remove("stop");
@@ -430,7 +442,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         confirm = false;
     }
     if confirm && let Some(cmd) = d.command {
-        let params = build_params(&d);
+        let params = build_params_in(&d, app.ui.language.formula_locale());
         match app.run(cmd, params) {
             Ok(r) => {
                 open = false;
@@ -730,4 +742,20 @@ fn page_order_preview(ui: &mut egui::Ui, order: PageOrder) {
     let d = (to - from).normalized();
     let n = vec2(-d.y, d.x);
     p.add(egui::Shape::convex_polygon(vec![to, to - d * 6.0 + n * 3.5, to - d * 6.0 - n * 3.5], t.accent, egui::Stroke::NONE));
+}
+
+#[cfg(test)]
+mod decimal_tests {
+    use super::parse_decimal;
+    use gridcraft_engine::formula::FormulaLocale::{En, Es, Pt};
+
+    #[test]
+    fn decimal_fields_accept_the_interface_separator() {
+        assert_eq!(parse_decimal("1,5", Pt), Some(1.5));
+        assert_eq!(parse_decimal(" -2,25 ", Es), Some(-2.25));
+        assert_eq!(parse_decimal("1.5", En), Some(1.5));
+        assert_eq!(parse_decimal("1,5", En), None);
+        assert_eq!(parse_decimal("abc", Pt), None);
+        assert_eq!(parse_decimal("inf", Pt), None);
+    }
 }

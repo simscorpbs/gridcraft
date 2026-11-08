@@ -1,5 +1,5 @@
 use super::ref_edit::{RefLabel, SHEET_DELETED, current_area_ref, end_pick, home_sheet_deleted, ref_edit};
-use super::show::{build_params, form_fields, ok_cancel};
+use super::show::{build_params, form_fields, ok_cancel, parse_decimal};
 use super::{Dialog, Field, Json, Map, SheetApp, json, vec2};
 
 /// Data › What-If Analysis › Goal Seek. OK runs `data.goalSeek` here; Cancel clears `open`, as
@@ -33,7 +33,8 @@ pub(super) fn goal_seek(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, c
         *confirm = false;
     }
     if *confirm {
-        match app.run("data.goalSeek", json!({"set": set, "to": to.parse::<f64>().unwrap_or(0.0), "changing": changing})) {
+        let to = parse_decimal(&to, app.ui.language.formula_locale()).unwrap_or(0.0);
+        match app.run("data.goalSeek", json!({"set": set, "to": to, "changing": changing})) {
             Ok(r) => app.toast = Some((format!("Goal Seeking found a solution: {}", r["value"]), crate::now_ms())),
             Err(e) => app.message = Some(("Goal Seek".into(), crate::clean_error(&e))),
         }
