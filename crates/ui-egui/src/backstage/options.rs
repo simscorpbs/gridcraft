@@ -90,6 +90,45 @@ fn general_options(app: &mut SheetApp, ui: &mut Ui, lang: Language) {
             .response
             .labelled_by(label.id);
         ui.end_row();
+        ui.label(lang.tr("Accent color"));
+        accent_picker(app, ui, lang);
+        ui.end_row();
+    });
+    ui.add_space(6.0);
+    let mut discord = app.ui.show_discord;
+    if ui.checkbox(&mut discord, lang.tr("Show the Discord button")).changed() {
+        app.run_or_alert("options.showDiscord", json!({"on": discord}));
+    }
+    let mut avatar = app.ui.show_account_picture;
+    if ui.checkbox(&mut avatar, lang.tr("Show the account avatar")).changed() {
+        app.run_or_alert("options.showAccountPicture", json!({"on": avatar}));
+    }
+}
+
+/// The accent colour choices: the named presets as swatches, the default among them, and a
+/// colour picker for any other colour. Every change runs `options.accentColor`.
+fn accent_picker(app: &mut SheetApp, ui: &mut Ui, lang: Language) {
+    let current = app.ui.accent_color;
+    ui.horizontal(|ui| {
+        for (name, preset) in crate::theme::AccentColor::PRESETS {
+            let name = lang.tr(name);
+            let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), egui::Sense::click());
+            let selected = preset == current;
+            ui.painter().rect_filled(rect, 3.0, preset.color32());
+            if selected {
+                ui.painter().rect_stroke(rect.expand(2.0), 4.0, egui::Stroke::new(2.0, ui.visuals().text_color()), egui::StrokeKind::Outside);
+            }
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, selected, name));
+            if resp.on_hover_text(name).clicked() {
+                app.run_or_alert("options.accentColor", json!({"value": preset.hex()}));
+            }
+        }
+        let mut custom = current.0;
+        let picker = ui.color_edit_button_srgb(&mut custom);
+        picker.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, lang.tr("Custom accent color")));
+        if picker.changed() {
+            app.run_or_alert("options.accentColor", json!({"value": crate::theme::AccentColor(custom).hex()}));
+        }
     });
 }
 
