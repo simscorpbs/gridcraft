@@ -1,5 +1,7 @@
 //! Format code parsing: sections, bracket tags and tokens.
 
+use gridcraft_core::date::DateLocale;
+
 use crate::FormatColor;
 
 /// At most this many sections are honoured (`pos;neg;zero;text`); extra ones are ignored.
@@ -122,6 +124,8 @@ pub(crate) struct Section {
     pub fraction: bool,
     pub currency: bool,
     pub fill: bool,
+    /// Date-name language from a `[$-LCID]` tag; `None` follows the default locale.
+    pub locale: Option<DateLocale>,
 }
 
 /// Splits a code into sections at unquoted, unescaped, unbracketed semicolons.
@@ -251,11 +255,12 @@ struct Raw {
     color: Option<FormatColor>,
     cond: Option<Cond>,
     currency: bool,
+    locale: Option<DateLocale>,
 }
 
 fn tokenize(src: &str) -> Raw {
     let cs: Vec<char> = src.chars().collect();
-    let mut raw = Raw { toks: Vec::new(), color: None, cond: None, currency: false };
+    let mut raw = Raw { toks: Vec::new(), color: None, cond: None, currency: false, locale: None };
     let toks = &mut raw.toks;
     // With no `]` at or after a `[`, that `[` is a literal; checking this once keeps the scan linear.
     let last_close = cs.iter().rposition(|&c| c == ']');
@@ -306,7 +311,7 @@ fn tokenize(src: &str) -> Raw {
                 let close = if last_close.is_some_and(|l| l > i) { cs.get(i + 1..).and_then(|r| r.iter().position(|&d| d == ']')) } else { None };
                 if let Some(p) = close {
                     let content: String = cs.get(i + 1..i + 1 + p).unwrap_or(&[]).iter().collect();
-                    bracket(&mut raw_parts(toks, &mut raw.color, &mut raw.cond, &mut raw.currency), &content);
+                    bracket(&mut raw_parts(toks, &mut raw.color, &mut raw.cond, &mut raw.currency, &mut raw.locale), &content);
                     i += p + 2;
                 } else {
                     push_lit(toks, "[");
@@ -391,10 +396,11 @@ struct RawParts<'a> {
     color: &'a mut Option<FormatColor>,
     cond: &'a mut Option<Cond>,
     currency: &'a mut bool,
+    locale: &'a mut Option<DateLocale>,
 }
 
-fn raw_parts<'a>(toks: &'a mut Vec<Tok>, color: &'a mut Option<FormatColor>, cond: &'a mut Option<Cond>, currency: &'a mut bool) -> RawParts<'a> {
-    RawParts { toks, color, cond, currency }
+fn raw_parts<'a>(toks: &'a mut Vec<Tok>, color: &'a mut Option<FormatColor>, cond: &'a mut Option<Cond>, currency: &'a mut bool, locale: &'a mut Option<DateLocale>) -> RawParts<'a> {
+    RawParts { toks, color, cond, currency, locale }
 }
 
 /// Handles the content of a `[...]` tag.
@@ -411,7 +417,14 @@ fn bracket(p: &mut RawParts<'_>, content: &str) {
         return;
     }
     if let Some(body) = content.strip_prefix('$') {
-        let sym = body.split('-').next().unwrap_or("");
+        let mut parts = body.splitn(2, '-');
+        let sym = parts.next().unwrap_or("");
+        if let Some(lcid) = parts.next().and_then(|h| u32::from_str_radix(h.trim(), 16).ok()) {
+            // Only the locale's date names matter here; an unknown LCID leaves the default in force.
+            if let Some(loc) = DateLocale::from_lcid(lcid) {
+                *p.locale = Some(loc);
+            }
+        }
         if !sym.is_empty() {
             *p.currency = true;
             push_lit(p.toks, sym);
@@ -438,7 +451,7 @@ fn date_part(t: &Tok) -> Option<DatePart> {
 }
 
 fn analyze(raw: Raw) -> Section {
-    let Raw { toks, color, cond, currency } = raw;
+    let Raw { toks, color, cond, currency, locale } = raw;
     let is_date = toks.iter().any(|t| matches!(t, Tok::Date(_)));
     let has_general = toks.iter().any(|t| matches!(t, Tok::General));
     let mut sec = Section {
@@ -455,6 +468,7 @@ fn analyze(raw: Raw) -> Section {
         fraction: false,
         currency,
         fill: toks.iter().any(|t| matches!(t, Tok::Fill(_))),
+        locale,
     };
     if is_date {
         sec.kind = SecKind::Date;

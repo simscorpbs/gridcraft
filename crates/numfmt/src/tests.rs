@@ -1018,3 +1018,50 @@ fn round_as_displayed_matches_excel() {
     assert_eq!(r("0", f64::MAX), f64::MAX);
     assert_eq!(r("0.0E+0", f64::MIN_POSITIVE), 2.2e-308);
 }
+
+fn nov8() -> f64 {
+    gridcraft_core::date::serial_from_ymd(S, 2026, 11, 8).unwrap()
+}
+
+#[test]
+fn lcid_416_renders_portuguese_names() {
+    assert_eq!(f(r#"[$-416]dddd, d "de" mmmm "de" yyyy"#, nov8()), "domingo, 8 de novembro de 2026");
+    assert_eq!(f("[$-416]mmm/yy", nov8()), "nov/26");
+    assert_eq!(f("[$-416]ddd", nov8()), "dom");
+    assert_eq!(f("[$-416]mmmmm", nov8()), "n");
+    assert_eq!(f("[$-816]dddd", nov8() + 3.0), "quarta-feira");
+    let march = gridcraft_core::date::serial_from_ymd(S, 2026, 3, 14).unwrap();
+    assert_eq!(f("[$-416]mmmm ddd", march), "março sáb");
+    assert_eq!(f("[$-416]dddd", march + 3.0), "terça-feira");
+    // The tag also works after a currency prefix.
+    assert_eq!(f("[$R$-416]mmm", nov8()), "R$nov");
+}
+
+#[test]
+fn other_lcids_stay_english() {
+    assert_eq!(f("[$-409]mmmm", nov8()), "November");
+    assert_eq!(f("[$-407]dddd", nov8()), "Sunday");
+    assert_eq!(f("mmm yyyy", nov8()), "Nov 2026");
+}
+
+#[test]
+fn default_locale_applies_without_tag_and_tag_wins() {
+    let fmt = NumberFormat::parse("dddd mmm");
+    let en = fmt.format_number_in(nov8(), S, DateLocale::English).0.text;
+    let pt = fmt.format_number_in(nov8(), S, DateLocale::Portuguese).0.text;
+    assert_eq!((en.as_str(), pt.as_str()), ("Sunday Nov", "domingo nov"));
+    let tagged = NumberFormat::parse("[$-409]mmmm");
+    assert_eq!(tagged.format_number_in(nov8(), S, DateLocale::Portuguese).0.text, "November");
+}
+
+#[test]
+fn process_default_locale_switch_reaches_text_function() {
+    // The only test that touches the process-wide default; it restores English before returning.
+    set_default_date_locale(DateLocale::Portuguese);
+    let pt = text_function(&Value::Number(nov8()), "dddd, d mmmm", S);
+    let tagged = text_function(&Value::Number(nov8()), "[$-409]mmmm", S);
+    set_default_date_locale(DateLocale::English);
+    assert_eq!(pt.as_deref(), Ok("domingo, 8 novembro"));
+    assert_eq!(tagged.as_deref(), Ok("November"));
+    assert_eq!(text_function(&Value::Number(nov8()), "mmmm", S).as_deref(), Ok("November"));
+}

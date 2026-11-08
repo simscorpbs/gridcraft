@@ -105,6 +105,12 @@ impl SheetApp {
 
     /// Per-frame logic (control channel, screenshots). Call before `ui`.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        // Date names in formats without a [$-LCID] tag follow the interface language, as Excel
+        // follows the system's. One atomic store per frame, so a language switch takes effect at once.
+        gridcraft_engine::core::date::set_default_date_locale(match self.ui.language {
+            i18n::Language::PtBr => gridcraft_engine::core::date::DateLocale::Portuguese,
+            _ => gridcraft_engine::core::date::DateLocale::English,
+        });
         self.ensure_text_width(ctx);
         // A keytip control request lives one frame: the ribbon consumes it during `ui`, and
         // anything that never reached a control (collapsed ribbon, tab switch) is dropped. One
