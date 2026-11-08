@@ -183,19 +183,6 @@ fn canonical_engine_templates_enter_the_selected_formula_language() {
 }
 
 #[test]
-fn portuguese_interface_retains_its_canonical_formula_fallback() {
-    let mut app = app();
-    app.run("app.language.set", json!({"code":"pt-BR"})).unwrap();
-    assert_eq!(app.ui.language, Language::PtBr);
-    assert!(enter(&mut app, "=SUM(1.5,2.25)"));
-    app.begin_edit(None, true);
-    assert_eq!(app.editor.as_ref().unwrap().text, "=SUM(1.5,2.25)");
-    assert!(!enter(&mut app, "=SUMA(1;2)"));
-    let restored: UiState = serde_json::from_str(&serde_json::to_string(&app.ui).unwrap()).unwrap();
-    assert_eq!(restored.language, Language::PtBr);
-}
-
-#[test]
 fn czech_interface_retains_its_canonical_formula_fallback() {
     // The Czech table translates interface labels only: formulas keep canonical English names,
     // `,` separators and `.` decimals until a Czech formula locale exists.
@@ -239,4 +226,27 @@ fn turkish_interface_retains_its_canonical_formula_fallback() {
     assert!(!enter(&mut app, "=TOPLA(1;2)"));
     let restored: UiState = serde_json::from_str(&serde_json::to_string(&app.ui).unwrap()).unwrap();
     assert_eq!(restored.language, Language::Tr);
+}
+
+#[test]
+fn portuguese_entry_uses_semicolons_decimal_commas_and_portuguese_names() {
+    let mut app = app();
+    app.run("app.language.set", json!({"code":"pt-BR"})).unwrap();
+    assert_eq!(app.ui.language, Language::PtBr);
+    assert!(enter(&mut app, "=SE(1,5>1;SOMA(1,5;2,25);0)"));
+    assert_eq!(formula(&app), "IF(1.5>1,SUM(1.5,2.25),0)");
+    assert_eq!(app.session.active().unwrap().wb.active().unwrap().value(CellRef::new(0, 0)), Value::Number(3.75));
+    app.begin_edit(None, false);
+    assert_eq!(app.editor.as_ref().unwrap().text, "=SE(1,5>1;SOMA(1,5;2,25);0)");
+    assert!(app.commit_edit(0, 0, false, false));
+    assert_eq!(formula(&app), "IF(1.5>1,SUM(1.5,2.25),0)");
+    assert!(enter(&mut app, "2,5"));
+    assert_eq!(app.session.active().unwrap().wb.active().unwrap().value(CellRef::new(0, 0)), Value::Number(2.5));
+    // The accent-less spelling is not a Portuguese function.
+    assert!(enter(&mut app, "=MEDIA(1;2)"));
+    assert_eq!(app.session.active().unwrap().wb.active().unwrap().value(CellRef::new(0, 0)), Value::Error(CellError::Name));
+    // API syntax stays canonical English.
+    assert!(app.run("cell.set", json!({"cell":"A2","input":"=SOMA(1;2)"})).is_err());
+    let restored: UiState = serde_json::from_str(&serde_json::to_string(&app.ui).unwrap()).unwrap();
+    assert_eq!(restored.language, Language::PtBr);
 }
