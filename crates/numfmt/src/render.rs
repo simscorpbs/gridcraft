@@ -1,7 +1,7 @@
 //! Rendering a value with a parsed section.
 
 use gridcraft_core::DateSystem;
-use gridcraft_core::date::{MONTHS, WEEKDAYS, datetime_from_serial, max_serial};
+use gridcraft_core::date::{DateLocale, datetime_from_serial, max_serial};
 
 use crate::decimal::{decimal_digits, fixed, fixed_from_digits, format_general_fit};
 use crate::parse::{DatePart, Section, Tok};
@@ -59,7 +59,8 @@ pub(crate) fn render_general(sec: &Section, v: f64, width: usize) -> Out {
 }
 
 /// Renders a date/time. `None` when the serial is outside the supported range.
-pub(crate) fn render_date(sec: &Section, v: f64, sys: DateSystem) -> Option<Out> {
+/// Month and weekday names follow the section's `[$-LCID]` tag, else `default_locale`.
+pub(crate) fn render_date(sec: &Section, v: f64, sys: DateSystem, default_locale: DateLocale) -> Option<Out> {
     if !v.is_finite() || !(0.0..max_serial(sys) as f64 + 1.0).contains(&v) {
         return None;
     }
@@ -80,8 +81,9 @@ pub(crate) fn render_date(sec: &Section, v: f64, sys: DateSystem) -> Option<Out>
     let second = (ms / 1000) % 60;
     let milli = ms % 1000;
     let pad = |n: i64, w: u8| if w >= 2 { format!("{:0w$}", n, w = w.min(20) as usize) } else { n.to_string() };
-    let month_name = MONTHS.get((dt.month as usize).wrapping_sub(1)).copied().unwrap_or("");
-    let day_name = WEEKDAYS.get(dt.weekday as usize).copied().unwrap_or("");
+    let locale = sec.locale.unwrap_or(default_locale);
+    let month_name = locale.month(dt.month as u32);
+    let day_name = locale.weekday(dt.weekday as u32);
     let mut out = Out::default();
     for t in &sec.toks {
         match t {
@@ -96,13 +98,13 @@ pub(crate) fn render_date(sec: &Section, v: f64, sys: DateSystem) -> Option<Out>
                     }
                     DatePart::Month(n) => match n {
                         1 | 2 => pad(dt.month as i64, n),
-                        3 => month_name.chars().take(3).collect(),
+                        3 => locale.month_short(dt.month as u32),
                         5 => month_name.chars().take(1).collect(),
                         _ => month_name.to_string(),
                     },
                     DatePart::Day(n) => match n {
                         1 | 2 => pad(dt.day as i64, n),
-                        3 => day_name.chars().take(3).collect(),
+                        3 => locale.weekday_short(dt.weekday as u32),
                         _ => day_name.to_string(),
                     },
                     DatePart::Hour(n) => {

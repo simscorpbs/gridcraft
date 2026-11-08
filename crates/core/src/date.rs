@@ -64,6 +64,37 @@ pub fn serial_from_unix_ms(ms: f64) -> f64 {
     25569.0 + ms / 86_400_000.0
 }
 
+/// Offset of the local time zone from UTC, in seconds (east positive), at the Unix time `ms`.
+/// Native targets ask the operating system through chrono's local offset; on wasm32 the browser's
+/// `Date.getTimezoneOffset` (minutes, west positive) is used.
+pub fn local_offset_secs_at(ms: f64) -> i64 {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use chrono::{Offset, TimeZone};
+        chrono::Local.timestamp_millis_opt(ms as i64).single().map_or(0, |t| i64::from(t.offset().fix().local_minus_utc()))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let date = js_sys::Date::new(&js_sys::JsValue::from_f64(ms));
+        -(date.get_timezone_offset() * 60.0).round() as i64
+    }
+}
+
+/// Date serial (1900 system, with fraction) of a Unix time in milliseconds as local wall-clock
+/// time, for a local zone `offset_secs` seconds east of UTC. Pure, so it can be tested without
+/// depending on the machine's time zone. `TODAY()` is the floor of this value, so it rolls over at
+/// local midnight.
+pub fn local_serial_from_unix_ms(ms: f64, offset_secs: i64) -> f64 {
+    serial_from_unix_ms(ms + offset_secs as f64 * 1000.0)
+}
+
+/// Current local date-time as a 1900-system serial (system clock and local zone); `None` when no
+/// clock is available.
+pub fn local_now_serial() -> Option<f64> {
+    let ms = unix_now_ms()?;
+    Some(local_serial_from_unix_ms(ms, local_offset_secs_at(ms)))
+}
+
 /// Converts a 1900-system serial (as the clock supplies it) to the serial of the same instant in `sys`.
 pub fn serial_in_system(sys: DateSystem, serial_1900: f64) -> f64 {
     match sys {
@@ -217,6 +248,88 @@ pub fn time_fraction(h: f64, m: f64, s: f64) -> f64 {
 pub const MONTHS: [&str; 12] =
     ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 pub const WEEKDAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+pub const MONTHS_PT: [&str; 12] =
+    ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+pub const MONTHS_PT_SHORT: [&str; 12] = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+pub const WEEKDAYS_PT: [&str; 7] =
+    ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+pub const WEEKDAYS_PT_SHORT: [&str; 7] = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+/// Language of month and weekday names in date formats (`mmm`, `mmmm`, `ddd`, `dddd`, `TEXT`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DateLocale {
+    #[default]
+    English,
+    /// pt-BR and pt-PT: lower-case names, as Excel shows them.
+    Portuguese,
+}
+
+impl DateLocale {
+    /// The locale for a Windows LCID from a `[$-xxxx]` tag (the low 16 bits are the language id).
+    /// 0x416 pt-BR and 0x816 pt-PT give Portuguese, 0x409 and the other English ids give English;
+    /// `None` for any other LCID, which leaves the default locale in force.
+    pub fn from_lcid(lcid: u32) -> Option<DateLocale> {
+        match lcid & 0xFFFF {
+            0x0416 | 0x0816 => Some(DateLocale::Portuguese),
+            0x0409 | 0x0809 | 0x0C09 | 0x1009 | 0x1409 | 0x1809 | 0x4009 => Some(DateLocale::English),
+            _ => None,
+        }
+    }
+
+    /// Full month name for a 1-based month.
+    pub fn month(self, month: u32) -> &'static str {
+        let i = (month as usize).wrapping_sub(1);
+        match self {
+            DateLocale::English => MONTHS.get(i),
+            DateLocale::Portuguese => MONTHS_PT.get(i),
+        }
+        .copied()
+        .unwrap_or("")
+    }
+
+    /// Abbreviated month name (`mmm`) for a 1-based month.
+    pub fn month_short(self, month: u32) -> String {
+        let i = (month as usize).wrapping_sub(1);
+        match self {
+            DateLocale::English => MONTHS.get(i).map(|m| m.chars().take(3).collect()),
+            DateLocale::Portuguese => MONTHS_PT_SHORT.get(i).map(|m| (*m).to_string()),
+        }
+        .unwrap_or_default()
+    }
+
+    /// Full weekday name for a day index with Sunday = 0.
+    pub fn weekday(self, weekday: u32) -> &'static str {
+        match self {
+            DateLocale::English => WEEKDAYS.get(weekday as usize),
+            DateLocale::Portuguese => WEEKDAYS_PT.get(weekday as usize),
+        }
+        .copied()
+        .unwrap_or("")
+    }
+
+    /// Abbreviated weekday name (`ddd`) for a day index with Sunday = 0.
+    pub fn weekday_short(self, weekday: u32) -> String {
+        match self {
+            DateLocale::English => WEEKDAYS.get(weekday as usize).map(|d| d.chars().take(3).collect()),
+            DateLocale::Portuguese => WEEKDAYS_PT_SHORT.get(weekday as usize).map(|d| (*d).to_string()),
+        }
+        .unwrap_or_default()
+    }
+}
+
+static DEFAULT_DATE_LOCALE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Sets the process-wide locale used for date names when a format has no `[$-LCID]` tag
+/// (Excel uses the system language there). English until the UI changes it.
+pub fn set_default_date_locale(locale: DateLocale) {
+    DEFAULT_DATE_LOCALE.store(u8::from(locale == DateLocale::Portuguese), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The process-wide default date-name locale; see [`set_default_date_locale`].
+pub fn default_date_locale() -> DateLocale {
+    if DEFAULT_DATE_LOCALE.load(std::sync::atomic::Ordering::Relaxed) == 1 { DateLocale::Portuguese } else { DateLocale::English }
+}
 
 #[cfg(test)]
 mod tests {
@@ -383,5 +496,32 @@ mod tests {
         let d = datetime_from_serial(s, 1.0).ok_or_else(|| std::io::Error::other("first serial should convert"))?;
         assert_eq!(d.weekday, 0); // 1900-01-01 was a Sunday in Excel's calendar
         Ok(())
+    }
+
+    #[test]
+    fn local_serial_applies_offset_and_rolls_over_at_local_midnight() {
+        // 2026-11-08 02:30 UTC is still 2026-11-07 23:30 in Brasilia (UTC-3).
+        let utc_day = serial_from_ymd(DateSystem::D1900, 2026, 11, 8).unwrap();
+        let ms = (utc_day - 25569.0 + 2.5 / 24.0) * 86_400_000.0;
+        assert_eq!(local_serial_from_unix_ms(ms, 0).floor(), utc_day);
+        let local = local_serial_from_unix_ms(ms, -3 * 3600);
+        assert_eq!(local.floor(), utc_day - 1.0);
+        assert!((local.fract() - 23.5 / 24.0).abs() < 1e-9);
+        // Half an hour later local midnight has passed.
+        assert_eq!(local_serial_from_unix_ms(ms + 1_800_000.0, -3 * 3600).floor(), utc_day);
+        // A positive offset (UTC+5:30) moves forward.
+        assert!((local_serial_from_unix_ms(ms, 19_800).fract() - 8.0 / 24.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn locale_names_and_lcids() {
+        assert_eq!(DateLocale::from_lcid(0x416), Some(DateLocale::Portuguese));
+        assert_eq!(DateLocale::from_lcid(0x816), Some(DateLocale::Portuguese));
+        assert_eq!(DateLocale::from_lcid(0x409), Some(DateLocale::English));
+        assert_eq!(DateLocale::from_lcid(0x407), None);
+        assert_eq!(DateLocale::Portuguese.month(3), "março");
+        assert_eq!(DateLocale::Portuguese.weekday_short(6), "sáb");
+        assert_eq!(DateLocale::English.month_short(9), "Sep");
+        assert_eq!(DateLocale::English.weekday(1), "Monday");
     }
 }

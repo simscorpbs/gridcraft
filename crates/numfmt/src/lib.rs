@@ -10,6 +10,8 @@ mod render;
 
 use std::sync::Arc;
 
+use gridcraft_core::date::default_date_locale;
+pub use gridcraft_core::date::{DateLocale, set_default_date_locale};
 use gridcraft_core::{CellError, DateSystem, Value};
 
 pub use builtin::{builtin_format, builtin_id};
@@ -287,6 +289,12 @@ impl NumberFormat {
 
     /// Formats a number. The flag is true when the value cannot be shown (date out of range).
     fn format_number(&self, n: f64, sys: DateSystem) -> (Formatted, bool) {
+        self.format_number_in(n, sys, default_date_locale())
+    }
+
+    /// [`NumberFormat::format_number`] with an explicit default language for date names (a
+    /// `[$-LCID]` tag in the format still wins).
+    fn format_number_in(&self, n: f64, sys: DateSystem, locale: DateLocale) -> (Formatted, bool) {
         let general = |n: f64| Formatted {
             text: format_general_fit(n, GENERAL_WIDTH).unwrap_or_else(|| OVERFLOW.into()),
             color: None,
@@ -308,7 +316,7 @@ impl NumberFormat {
                 if minus {
                     None
                 } else {
-                    render::render_date(sec, n.abs(), sys)
+                    render::render_date(sec, n.abs(), sys, locale)
                 }
             }
             SecKind::Number => Some(render::render_number(sec, n.abs())),

@@ -223,7 +223,15 @@ fn month_from_name(s: &str) -> Option<u32> {
     if l.len() < 3 {
         return None;
     }
-    MONTHS.iter().position(|m| m.to_ascii_lowercase().starts_with(&l)).map(|i| i as u32 + 1)
+    if let Some(i) = MONTHS.iter().position(|m| m.to_ascii_lowercase().starts_with(&l)) {
+        return Some(i as u32 + 1);
+    }
+    // Portuguese names (abbreviations or full), only while the UI language is Portuguese.
+    if crate::date::default_date_locale() == crate::date::DateLocale::Portuguese {
+        let l = s.to_lowercase();
+        return crate::date::MONTHS_PT.iter().position(|m| m.starts_with(&l)).map(|i| i as u32 + 1);
+    }
+    None
 }
 
 /// Time part: `h:mm`, `h:mm:ss`, `h:mm:ss.000`, `h AM`, with optional AM/PM.
@@ -349,8 +357,8 @@ fn valid_ymd(sys: DateSystem, y: i64, m: i64, d: i64) -> Option<f64> {
 /// The year used for dates typed without one, from the system clock (browser clock on wasm).
 /// Falls back to 2026 only when no clock is available.
 pub fn current_year() -> i64 {
-    if let Some(ms) = crate::date::unix_now_ms() {
-        let days = (ms / 86_400_000.0).floor() as i64;
+    if let Some(serial) = crate::date::local_now_serial() {
+        let days = (serial - 25569.0).floor() as i64;
         return crate::date::civil_from_days(days).0 as i64;
     }
     2026
