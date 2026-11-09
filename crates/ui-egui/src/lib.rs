@@ -44,6 +44,7 @@ pub mod keymap;
 pub mod keytips;
 pub mod macro_editor;
 pub mod macro_ui;
+pub mod metrics;
 pub mod objects;
 pub mod outline;
 pub mod panes;

@@ -350,3 +350,48 @@ fn upward_text_with_middle_align_is_centred_in_a_merged_block() {
     assert!((bb.center().y - rect.center().y).abs() < 0.01, "{bb:?} not centred in {rect:?}");
     assert!((bb.center().x - rect.center().x).abs() < 0.01, "{bb:?} not centred in {rect:?}");
 }
+
+/// The text rectangles `paint_headers` draws for a default sheet at `zoom` percent.
+#[cfg(test)]
+fn header_labels(zoom: u16) -> (Vec<egui::Rect>, Vec<egui::Rect>) {
+    use super::{Geo, PaneQuad, Rect, Sheet, pos2};
+    let mut sh = Sheet::new("S");
+    sh.zoom = zoom;
+    let area = Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(1400.0, 900.0));
+    let geo = Geo::new(&sh, area, egui::Vec2::ZERO);
+    let (cols, rows) = (geo.scroll_cols(&sh), geo.scroll_rows(&sh));
+    let quads: Vec<PaneQuad> = vec![(rows, cols, geo.cells)];
+    let t = crate::theme::Tokens::light();
+    let sel = gridcraft_engine::Selection::default();
+    let ctx = egui::Context::default();
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        super::show::paint_headers(ui.painter(), &geo, &sh, &sel, &t, &quads, &[]);
+    });
+    out.textures_delta.clear();
+    let (mut cl, mut rl) = (vec![], vec![]);
+    for s in &out.shapes {
+        if let egui::epaint::Shape::Text(ts) = &s.shape {
+            let r = ts.visual_bounding_rect();
+            if r.center().y < geo.cells.top() { cl.push(r) } else { rl.push(r) }
+        }
+    }
+    (cl, rl)
+}
+
+#[test]
+fn header_labels_that_do_not_fit_are_left_out_and_never_overlap() {
+    for (labels, what) in [header_labels(10), header_labels(100)].into_iter().zip(["10%", "100%"]) {
+        for set in [&labels.0, &labels.1] {
+            for (i, a) in set.iter().enumerate() {
+                for b in &set[i + 1..] {
+                    assert!(!a.intersects(*b), "{what}: labels overlap: {a:?} {b:?}");
+                }
+            }
+        }
+    }
+    // At 10% the default 5 pt columns cannot hold a letter: none is drawn.
+    assert!(header_labels(10).0.is_empty(), "no column letters at 10%");
+    // At 100% every label that is in view is drawn: one per visible column and row.
+    let (cols, rows) = header_labels(100);
+    assert!(cols.len() >= 20 && rows.len() >= 40, "{} columns, {} rows", cols.len(), rows.len());
+}

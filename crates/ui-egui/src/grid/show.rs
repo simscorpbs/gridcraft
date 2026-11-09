@@ -559,7 +559,9 @@ pub(crate) fn paint_headers(
     let r = Rect::from_min_max(pos2(geo.head_left(), geo.head_top()), geo.rect.max);
     let top = Rect::from_min_max(pos2(geo.cells.left(), r.top()), pos2(r.right(), geo.cells.top()));
     let left = Rect::from_min_max(pos2(r.left(), geo.cells.top()), pos2(geo.cells.left(), r.bottom()));
-    p.rect_filled(top, 0.0, t.header_bg);
+    let ppp = p.ctx().pixels_per_point();
+    let snap = |edge: f32| crate::metrics::snap_line(edge, 1.0, ppp);
+    paint_header_band(p, top, t);
     p.rect_filled(left, 0.0, t.header_bg);
     let bounds = sel.bounds();
     let col_sel = |c: u32| sel.ranges.iter().any(|x| c >= x.start.col && c <= x.end.col);
@@ -588,7 +590,7 @@ pub(crate) fn paint_headers(
                     pc.rect_filled(cr, 0.0, if full_col(c) { t.header_all_bg } else { t.header_sel_bg });
                     pc.line_segment([pos2(cr.left(), cr.bottom() - 1.0), pos2(cr.right(), cr.bottom() - 1.0)], Stroke::new(2.0, t.accent));
                 }
-                pc.line_segment([pos2(cr.right() - 0.5, cr.top() + 3.0), pos2(cr.right() - 0.5, cr.bottom())], Stroke::new(1.0, t.header_line));
+                pc.line_segment([pos2(snap(cr.right()), cr.top() + 3.0), pos2(snap(cr.right()), cr.bottom())], Stroke::new(1.0, t.header_line));
                 let (before, after) = hidden_around(c, |i| sh.col_width(i));
                 for x in [before.then_some(cr.left()), after.then_some(cr.right())].into_iter().flatten() {
                     for dx in [-1.5, 1.5] {
@@ -608,7 +610,12 @@ pub(crate) fn paint_headers(
                         }
                     }
                     None => {
-                        pc.text(cr.center(), Align2::CENTER_CENTER, col_to_letters(c), font.clone(), color);
+                        // A label wider than its column is left out, as Excel does, so labels never overlap.
+                        let label = col_to_letters(c);
+                        let galley = pc.layout_no_wrap(label, font.clone(), color);
+                        if header_label_fits(galley.size().x, cr.width()) {
+                            pc.galley(cr.center() - galley.size() / 2.0, galley, color);
+                        }
                     }
                 }
             }
@@ -629,7 +636,7 @@ pub(crate) fn paint_headers(
                     pr.rect_filled(cr, 0.0, if full_row(rr) { t.header_all_bg } else { t.header_sel_bg });
                     pr.line_segment([pos2(cr.right() - 1.0, cr.top()), pos2(cr.right() - 1.0, cr.bottom())], Stroke::new(2.0, t.accent));
                 }
-                pr.line_segment([pos2(cr.left() + 3.0, cr.bottom() - 0.5), pos2(cr.right(), cr.bottom() - 0.5)], Stroke::new(1.0, t.header_line));
+                pr.line_segment([pos2(cr.left() + 3.0, snap(cr.bottom())), pos2(cr.right(), snap(cr.bottom()))], Stroke::new(1.0, t.header_line));
                 let (before, after) = hidden_around(rr, |i| sh.row_height(i));
                 for y in [before.then_some(cr.top()), after.then_some(cr.bottom())].into_iter().flatten() {
                     for dy in [-1.5, 1.5] {
@@ -637,7 +644,10 @@ pub(crate) fn paint_headers(
                     }
                 }
                 let color = if row_sel(rr) { t.header_sel_text } else { t.header_text };
-                pr.text(cr.center(), Align2::CENTER_CENTER, (rr as u64 + 1).to_string(), font.clone(), color);
+                let galley = pr.layout_no_wrap((rr as u64 + 1).to_string(), font.clone(), color);
+                if header_label_fits(galley.size().y, cr.height()) && header_label_fits(galley.size().x, cr.width()) {
+                    pr.galley(cr.center() - galley.size() / 2.0, galley, color);
+                }
             }
         }
     }
@@ -650,8 +660,30 @@ pub(crate) fn paint_headers(
         pos2(corner.left() + 7.0, corner.bottom() - 3.0),
     ];
     p.add(egui::Shape::convex_polygon(tri, Color32::from_gray(190), Stroke::NONE));
-    p.line_segment([pos2(r.left(), geo.cells.top() - 0.5), pos2(r.right(), geo.cells.top() - 0.5)], Stroke::new(1.0, t.header_line));
-    p.line_segment([pos2(geo.cells.left() - 0.5, r.top()), pos2(geo.cells.left() - 0.5, r.bottom())], Stroke::new(1.0, t.header_line));
+    p.line_segment([pos2(r.left(), snap(geo.cells.top())), pos2(r.right(), snap(geo.cells.top()))], Stroke::new(1.0, t.header_line));
+    p.line_segment([pos2(snap(geo.cells.left()), r.top()), pos2(snap(geo.cells.left()), r.bottom())], Stroke::new(1.0, t.header_line));
+}
+
+/// Whether a header label `extent` points long fits its cell, `cell` points long, with a point of
+/// air each side. Excel for Mac draws only the labels that do.
+pub(super) fn header_label_fits(extent: f32, cell: f32) -> bool {
+    extent + 2.0 <= cell
+}
+
+/// The column header band: a vertical gradient from `header_top` to `header_bg` (flat when the
+/// two are the same, as in the dark theme).
+fn paint_header_band(p: &Painter, band: Rect, t: &Tokens) {
+    if t.header_top == t.header_bg {
+        p.rect_filled(band, 0.0, t.header_bg);
+        return;
+    }
+    let mut mesh = egui::Mesh::default();
+    for (pos, color) in [(band.left_top(), t.header_top), (band.right_top(), t.header_top), (band.right_bottom(), t.header_bg), (band.left_bottom(), t.header_bg)] {
+        mesh.colored_vertex(pos, color);
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    p.add(egui::Shape::mesh(mesh));
 }
 
 /// Whether the line before / after visible line `i` is hidden (zero size), so its header edges

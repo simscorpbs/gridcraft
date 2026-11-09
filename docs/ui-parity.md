@@ -245,6 +245,44 @@ Key tips 3–5 · remaining shortcuts with their features 2–4 · context menus
 8–12 · Options dialog and ribbon/QAT customization 6–10 · accessibility 12–18 · selection and
 scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
+## Excel for Mac chrome (measured)
+
+Measured on Excel for Mac 16.x (Microsoft 365, light theme) from Retina screenshots, 2x pixels
+converted to points. Geometry lives in `crates/ui-egui/src/metrics.rs` (`Metrics::MAC`, chosen with
+`cfg(target_os = "macos")`; tests force it on any platform with `metrics::force_mac()`).
+`Metrics::STANDARD` is what Windows and Linux always drew and is unchanged. Colours are light-theme
+tokens in `theme.rs` on every platform; the dark theme is untouched. Pinned by
+`metrics::tests`, `theme::contrast_tests::excel_mac_light_palette_tokens_are_fixed`,
+`tests/it/mac_chrome.rs` and `grid::tests`.
+
+| Measurement | Value | Where in code |
+|---|---|---|
+| Top frame (title bar + tab row) | `#F2F2F2`, 70 pt to the ribbon card (28 + 42) | `Metrics::{title_bar_h, tab_row_h}`, `ribbon.rs::show`, `ribbon/title_bar.rs`; token `window` |
+| Share button | `#146B32`, 17 pt tall, white text; a chosen accent colours it | token `share`, `title_bar.rs::share_button`, `Metrics::share_button_h` |
+| Ribbon card | white, 74 pt, 12 pt inset each side, rounded | `Metrics::{ribbon_card_h, ribbon_inset_x, ribbon_inset_y, ribbon_spacing_y}`, `ribbon.rs::show` |
+| Line above the ribbon | 1 pt `#EFEFEF` across the window | token `ribbon_line` |
+| Notice bar | 27 pt, `#FFFACD`, border `#CCC8A4` | `Metrics::notice_bar_h`, `widgets.rs::notice_bar`; tokens `notice_warn_*` |
+| Formula bar | 19 pt, `#FCFCFC` | `Metrics::{formula_bar_h, formula_pad, formula_control_h, ...}`, `formula_bar.rs`; token `formula_bar` |
+| Column header | 25 pt, gradient `#FDFDFD` to `#F6F6F6`, 1 pt `#AEADAC` line | `Metrics::col_header_h`, `grid/show.rs::paint_header_band`; tokens `header_top`, `header_bg`, `header_line` |
+| Row header | 26 pt wide (two digits), same line | `Metrics::{row_header_digit_w, row_header_pad}`, `grid/geo.rs` |
+| Row at 100% | 16 pt (15 + 1) | `DISPLAY_SCALE` 0.8 x 20 units, unchanged |
+| Gridlines | 1 pt `#CACACA`, snapped to device pixels | token `gridline`, `metrics::snap_line`, `grid/quadrant.rs` |
+| Header labels | a label wider than its cell is not drawn | `grid/show.rs::header_label_fits` |
+| 100% zoom text | 11 pt text is 11 screen points (72 per inch) on a Mac, 96 per inch elsewhere | `metrics::px_per_pt` (cell text, in-cell editor, shapes, page-layout header/footer) |
+| Sheet tabs | 21 pt, `#ECECEC`, 1 pt `#C7C7C7` line above, active tab white with a green name | `Metrics::sheet_tabs_h`, `tabs.rs::sheet_tabs`; tokens `tab_bar`, `tab_line`, `tab_active` |
+| Status bar | 27 pt, `#F2F2F2`, Ready left; view buttons, zoom slider and percentage right | `Metrics::status_bar_h`, `tabs.rs::status_bar`; token `status_bar` |
+
+Not done or not measured:
+
+- Default column width 65 pt (64 + 1): the grid has one scale for both axes (rows 20 units to 16 pt);
+  a 64-unit column is 51.2 pt. A separate horizontal scale touches every `geo.z` use and is left out.
+- Minimum window size: not measured, left as it is.
+- Ribbon control heights are unchanged (23 and 72 pt); only the card, its insets and the stack spacing
+  changed, so the controls nearly fill the 74 pt card. Rounded corner radius and the sizes of the view
+  buttons and slider in the status bar are not measured.
+- The macOS branches were compiled with `--target aarch64-apple-darwin` where the target was installed
+  (see the handoff), not run on a Mac.
+
 ## Revision history
 
 | Date | Change | Summary |

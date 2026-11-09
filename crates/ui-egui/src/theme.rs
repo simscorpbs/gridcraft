@@ -46,6 +46,8 @@ pub struct Tokens {
     pub window: Color32,
     pub ribbon: Color32,
     pub ribbon_border: Color32,
+    /// The 1 pt line across the window above the ribbon card (Excel for Mac).
+    pub ribbon_line: Color32,
     pub text: Color32,
     pub text_dim: Color32,
     pub text_disabled: Color32,
@@ -60,6 +62,8 @@ pub struct Tokens {
     pub desk: Color32,
     pub gridline: Color32,
     pub header_bg: Color32,
+    /// The top of the column header's gradient (`header_bg` is its bottom, and the row header's fill).
+    pub header_top: Color32,
     pub header_text: Color32,
     pub header_line: Color32,
     pub header_sel_bg: Color32,
@@ -72,6 +76,12 @@ pub struct Tokens {
     pub input_bg: Color32,
     pub input_border: Color32,
     pub tab_bar: Color32,
+    /// The 1 pt line above the sheet tab bar and around the active tab.
+    pub tab_line: Color32,
+    /// The formula bar's fill.
+    pub formula_bar: Color32,
+    /// The Share button's fill (title bar); text on it is `on_accent`.
+    pub share: Color32,
     pub tab_active: Color32,
     pub status_bar: Color32,
     pub cell_text: Color32,
@@ -214,9 +224,10 @@ impl Tokens {
     fn palette(dark: bool) -> Tokens {
         Tokens {
             dark,
-            window: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x29, 0x29, 0x29)),
+            window: pick(dark, Color32::from_rgb(0xF2, 0xF2, 0xF2), Color32::from_rgb(0x29, 0x29, 0x29)),
             ribbon: pick(dark, Color32::from_rgb(0xFF, 0xFF, 0xFF), Color32::from_rgb(0x33, 0x33, 0x33)),
             ribbon_border: pick(dark, Color32::from_rgb(0xE3, 0xE3, 0xE3), Color32::from_rgb(0x40, 0x40, 0x40)),
+            ribbon_line: pick(dark, rgb(0xEFEFEF), rgb(0x40_4040)),
             text: pick(dark, Color32::from_rgb(0x24, 0x24, 0x24), Color32::from_rgb(0xEE, 0xEE, 0xEE)),
             text_dim: pick(dark, Color32::from_rgb(0x61, 0x61, 0x61), Color32::from_rgb(0xB0, 0xB0, 0xB0)),
             text_disabled: pick(dark, Color32::from_rgb(0xB0, 0xB0, 0xB0), Color32::from_rgb(0x70, 0x70, 0x70)),
@@ -228,10 +239,11 @@ impl Tokens {
             separator: pick(dark, Color32::from_rgb(0xE0, 0xE0, 0xE0), Color32::from_rgb(0x48, 0x48, 0x48)),
             grid_bg: Color32::WHITE,
             desk: pick(dark, Color32::from_rgb(0xDE, 0xDE, 0xDE), Color32::from_rgb(0x3A, 0x3A, 0x3A)),
-            gridline: Color32::from_rgb(0xE1, 0xE1, 0xE1),
-            header_bg: pick(dark, Color32::from_rgb(0xF8, 0xF8, 0xF8), Color32::from_rgb(0x30, 0x30, 0x30)),
+            gridline: Color32::from_rgb(0xCA, 0xCA, 0xCA),
+            header_bg: pick(dark, Color32::from_rgb(0xF6, 0xF6, 0xF6), Color32::from_rgb(0x30, 0x30, 0x30)),
+            header_top: pick(dark, Color32::from_rgb(0xFD, 0xFD, 0xFD), Color32::from_rgb(0x30, 0x30, 0x30)),
             header_text: pick(dark, Color32::from_rgb(0x42, 0x42, 0x42), Color32::from_rgb(0xCC, 0xCC, 0xCC)),
-            header_line: pick(dark, Color32::from_rgb(0xD6, 0xD6, 0xD6), Color32::from_rgb(0x45, 0x45, 0x45)),
+            header_line: pick(dark, Color32::from_rgb(0xAE, 0xAD, 0xAC), Color32::from_rgb(0x45, 0x45, 0x45)),
             header_sel_bg: pick(dark, Color32::from_rgb(0xE1, 0xE1, 0xE1), Color32::from_rgb(0x45, 0x45, 0x45)),
             header_sel_text: pick(dark, Color32::from_rgb(0x0B, 0x5E, 0x31), Color32::from_rgb(0x6F, 0xD3, 0x9A)),
             header_all_bg: pick(dark, Color32::from_rgb(0xC8, 0xE6, 0xD3), Color32::from_rgb(0x2E, 0x55, 0x3E)),
@@ -240,9 +252,12 @@ impl Tokens {
             sel_border: Color32::from_rgb(0x10, 0x7C, 0x41),
             input_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x1F, 0x1F, 0x1F)),
             input_border: pick(dark, Color32::from_rgb(0xD1, 0xD1, 0xD1), Color32::from_rgb(0x50, 0x50, 0x50)),
-            tab_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x29, 0x29, 0x29)),
+            tab_bar: pick(dark, Color32::from_rgb(0xEC, 0xEC, 0xEC), Color32::from_rgb(0x29, 0x29, 0x29)),
+            tab_line: pick(dark, rgb(0xC7C7C7), rgb(0x40_4040)),
+            formula_bar: pick(dark, rgb(0xFCFCFC), rgb(0x29_2929)),
+            share: pick(dark, rgb(0x146B32), Color32::from_rgb(0x5C, 0xC5, 0x87)),
             tab_active: pick(dark, Color32::WHITE, Color32::from_rgb(0x3A, 0x3A, 0x3A)),
-            status_bar: pick(dark, Color32::from_rgb(0xF3, 0xF3, 0xF3), Color32::from_rgb(0x29, 0x29, 0x29)),
+            status_bar: pick(dark, Color32::from_rgb(0xF2, 0xF2, 0xF2), Color32::from_rgb(0x29, 0x29, 0x29)),
             cell_text: Color32::BLACK,
             menu_bg: pick(dark, Color32::WHITE, Color32::from_rgb(0x30, 0x30, 0x30)),
             shadow: pick(dark, Color32::from_black_alpha(40), Color32::from_black_alpha(90)),
@@ -250,8 +265,8 @@ impl Tokens {
             error_check_green: pick(dark, Color32::from_rgb(0x1E, 0x8E, 0x3E), Color32::from_rgb(0x4C, 0xC2, 0x6B)),
             warning_fill: Color32::from_rgb(0xF2, 0xB7, 0x05),
             warning_ink: Color32::BLACK,
-            notice_warn_bg: pick(dark, Color32::from_rgb(0xFF, 0xF4, 0xCE), Color32::from_rgb(0x4A, 0x3F, 0x1E)),
-            notice_warn_border: pick(dark, Color32::from_rgb(0xF0, 0xC3, 0x6E), Color32::from_rgb(0x7A, 0x67, 0x30)),
+            notice_warn_bg: pick(dark, Color32::from_rgb(0xFF, 0xFA, 0xCD), Color32::from_rgb(0x4A, 0x3F, 0x1E)),
+            notice_warn_border: pick(dark, Color32::from_rgb(0xCC, 0xC8, 0xA4), Color32::from_rgb(0x7A, 0x67, 0x30)),
             notice_info_bg: pick(dark, Color32::from_rgb(0xEA, 0xF2, 0xFB), Color32::from_rgb(0x24, 0x33, 0x44)),
             notice_info_border: pick(dark, Color32::from_rgb(0xB9, 0xD2, 0xEC), Color32::from_rgb(0x3B, 0x55, 0x72)),
             on_accent: pick(dark, Color32::WHITE, rgb(0x0F2A1A)),
@@ -438,6 +453,11 @@ mod contrast_tests {
         add("notice text (warning)", t.text, t.notice_warn_bg, TEXT);
         add("notice text (info)", t.text, t.notice_info_bg, TEXT);
         add("header text", t.header_text, t.header_bg, TEXT);
+        add("header text (gradient top)", t.header_text, t.header_top, TEXT);
+        add("text on formula bar", t.text, t.formula_bar, TEXT);
+        add("dim text on formula bar", t.text_dim, t.formula_bar, TEXT);
+        add("active sheet name on its tab", t.accent, t.tab_active, TEXT);
+        add("Share text", t.on_accent, t.share, TEXT);
         add("selected header text", t.header_sel_text, t.header_sel_bg, TEXT);
         for (i, c) in t.ref_colors.iter().enumerate() {
             add(&format!("formula bar reference {i}"), *c, t.input_bg, TEXT);
@@ -484,6 +504,46 @@ mod contrast_tests {
         add("PY tag text", t.on_sheet_py_tag, t.sheet_py_tag, TEXT);
         add("PY tag on sheet", t.sheet_py_tag, t.grid_bg, GLYPH);
         v
+    }
+
+    /// The light theme's chrome tones, measured on Excel for Mac (docs/ui-parity.md); the dark
+    /// theme keeps its own.
+    #[test]
+    fn excel_mac_light_palette_tokens_are_fixed() {
+        let t = Tokens::light();
+        let hex = |c: Color32| u32::from(c.r()) << 16 | u32::from(c.g()) << 8 | u32::from(c.b());
+        assert_eq!(hex(t.window), 0xF2F2F2, "title bar, tab row and ribbon surround");
+        assert_eq!(hex(t.ribbon), 0xFFFFFF, "ribbon card");
+        assert_eq!(hex(t.ribbon_line), 0xEFEFEF);
+        assert_eq!(hex(t.notice_warn_bg), 0xFFFACD);
+        assert_eq!(hex(t.notice_warn_border), 0xCCC8A4);
+        assert_eq!(hex(t.formula_bar), 0xFCFCFC);
+        assert_eq!((hex(t.header_top), hex(t.header_bg)), (0xFDFDFD, 0xF6F6F6), "column header gradient");
+        assert_eq!(hex(t.header_line), 0xAEADAC);
+        assert_eq!(hex(t.gridline), 0xCACACA);
+        assert_eq!(hex(t.tab_bar), 0xECECEC, "sheet tabs");
+        assert_eq!(hex(t.tab_line), 0xC7C7C7);
+        assert_eq!(hex(t.tab_active), 0xFFFFFF);
+        assert_eq!(hex(t.status_bar), 0xF2F2F2);
+        assert_eq!(hex(t.share), 0x146B32);
+        // The default accent keeps Excel's green and its hand-tuned palette.
+        assert_eq!(hex(t.accent), 0x107C41);
+        assert_eq!(hex(t.accent_dark), 0x0B5E31);
+        assert_eq!(hex(t.accent_soft), 0xDFF1E6);
+        // A chosen accent colours Share too.
+        let blue = Tokens::with_accent(false, AccentColor::PRESETS[1].1);
+        assert_eq!(blue.share, blue.accent);
+    }
+
+    #[test]
+    fn the_dark_theme_does_not_take_the_mac_light_tones() {
+        let d = Tokens::dark();
+        assert_eq!(d.window, Color32::from_rgb(0x29, 0x29, 0x29));
+        assert_eq!(d.tab_bar, Color32::from_rgb(0x29, 0x29, 0x29));
+        assert_eq!(d.status_bar, Color32::from_rgb(0x29, 0x29, 0x29));
+        assert_eq!(d.header_top, d.header_bg, "no gradient in the dark theme");
+        assert_eq!(d.header_line, Color32::from_rgb(0x45, 0x45, 0x45));
+        assert_eq!(d.notice_warn_bg, Color32::from_rgb(0x4A, 0x3F, 0x1E));
     }
 
     #[test]

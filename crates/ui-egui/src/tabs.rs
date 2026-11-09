@@ -127,14 +127,16 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
     if !view.show_sheet_tabs && !view.show_horizontal_scroll {
         return;
     }
-    egui::Panel::bottom("sheet_tabs").exact_size(32.0).frame(egui::Frame::NONE.fill(t.tab_bar)).show(ui, |ui| {
+    let m = crate::metrics::Metrics::current();
+    egui::Panel::bottom("sheet_tabs").exact_size(m.sheet_tabs_h).frame(egui::Frame::NONE.fill(t.tab_bar)).show(ui, |ui| {
         let rect = ui.max_rect();
-        ui.painter().line_segment([rect.left_top(), rect.right_top()], Stroke::new(1.0, t.ribbon_border));
+        ui.painter().line_segment([rect.left_top(), rect.right_top()], Stroke::new(1.0, t.tab_line));
+        let control = m.sheet_tab_control(24.0);
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             ui.add_space(8.0);
             if view.show_sheet_tabs {
-                if crate::widgets::icon_button(ui, Icon::Left, t.text_dim, app.ui.language.tr("Previous sheet"), vec2(24.0, 24.0)).clicked() {
+                if crate::widgets::icon_button(ui, Icon::Left, t.text_dim, app.ui.language.tr("Previous sheet"), vec2(control, control)).clicked() {
                     // Ctrl-click jumps to the first visible sheet, like Excel's tab scroll buttons.
                     let edge =
                         if ui.input(|i| i.modifiers.command) { app.session.active().and_then(|d| edge_sheet(&d.wb.sheets, false)) } else { None };
@@ -146,7 +148,7 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                         None => app.run_or_alert("sheet.previous", json!({})),
                     }
                 }
-                if crate::widgets::icon_button(ui, Icon::Right, t.text_dim, app.ui.language.tr("Next sheet"), vec2(24.0, 24.0)).clicked() {
+                if crate::widgets::icon_button(ui, Icon::Right, t.text_dim, app.ui.language.tr("Next sheet"), vec2(control, control)).clicked() {
                     // Ctrl-click jumps to the last visible sheet.
                     let edge =
                         if ui.input(|i| i.modifiers.command) { app.session.active().and_then(|d| edge_sheet(&d.wb.sheets, true)) } else { None };
@@ -158,7 +160,7 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                         None => app.run_or_alert("sheet.next", json!({})),
                     }
                 }
-                let all = crate::widgets::icon_button(ui, Icon::SheetList, t.text_dim, app.ui.language.tr("All sheets"), vec2(24.0, 24.0));
+                let all = crate::widgets::icon_button(ui, Icon::SheetList, t.text_dim, app.ui.language.tr("All sheets"), vec2(control, control));
                 all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, app.ui.language.tr("All sheets")));
                 let items = app.session.active().map(|d| navigator_items(&d.wb.sheets)).unwrap_or_default();
                 let active = app.session.active().map(|d| d.wb.active_sheet().to_string()).unwrap_or_default();
@@ -208,7 +210,7 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                 changed | data.remove_temp::<bool>(request_id).unwrap_or(false)
             });
             if view.show_sheet_tabs {
-                ui.allocate_ui_with_layout(vec2(tabs_width, 30.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.allocate_ui_with_layout(vec2(tabs_width, m.sheet_tab_cell_h()), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     // Translate vertical wheel movement into horizontal
                     // worksheet-tab scrolling.
                     let wheel_scroll = if ui.rect_contains_pointer(ui.max_rect()) {
@@ -236,7 +238,7 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                     let font = if active { theme::ui_bold(13.0) } else { theme::ui_font(13.0) };
                                     let tw = ui.painter().layout_no_wrap(name.clone(), font.clone(), t.text).size().x;
                                     let w = (tw + 32.0).max(72.0);
-                                    let (r, resp) = ui.allocate_exact_size(vec2(w, 30.0), Sense::click_and_drag());
+                                    let (r, resp) = ui.allocate_exact_size(vec2(w, m.sheet_tab_cell_h()), Sense::click_and_drag());
                                     if active && reveal_active {
                                         resp.scroll_to_me(None);
                                     }
@@ -246,7 +248,7 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                         ui.painter().rect_stroke(
                                             Rect::from_min_max(pos2(r.left(), r.top() - 2.0), r.max),
                                             4.0,
-                                            Stroke::new(1.0, t.ribbon_border),
+                                            Stroke::new(1.0, t.tab_line),
                                             StrokeKind::Inside,
                                         );
                                     } else if resp.hovered() {
@@ -354,7 +356,7 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                         });
                 });
                 ui.add_space(6.0);
-                if crate::widgets::icon_button(ui, Icon::Plus, t.text_dim, app.ui.language.tr("New sheet (⇧F11)"), vec2(26.0, 26.0)).clicked() {
+                if crate::widgets::icon_button(ui, Icon::Plus, t.text_dim, app.ui.language.tr("New sheet (⇧F11)"), vec2(m.sheet_tab_control(26.0), m.sheet_tab_control(26.0))).clicked() {
                     app.run_or_alert("home.insertSheet", json!({}));
                 }
             }
@@ -385,7 +387,7 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
 /// Draws status mode/messages, zoom controls/view-mode buttons and selection statistics.
 pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    egui::Panel::bottom("status_bar").exact_size(26.0).frame(egui::Frame::NONE.fill(t.status_bar).inner_margin(egui::Margin::symmetric(12, 0))).show(
+    egui::Panel::bottom("status_bar").exact_size(crate::metrics::Metrics::current().status_bar_h).frame(egui::Frame::NONE.fill(t.status_bar).inner_margin(egui::Margin::symmetric(12, 0))).show(
         ui,
         |ui| {
             // A right-click anywhere on the status bar opens the statistics menu, the text included, so its labels are not
