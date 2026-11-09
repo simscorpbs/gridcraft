@@ -271,11 +271,10 @@ tokens in `theme.rs` on every platform; the dark theme is untouched. Pinned by
 | 100% zoom text | 11 pt text is 11 screen points (72 per inch) on a Mac, 96 per inch elsewhere | `metrics::px_per_pt` (cell text, in-cell editor, shapes, page-layout header/footer) |
 | Sheet tabs | 21 pt, `#ECECEC`, 1 pt `#C7C7C7` line above, active tab white with a green name | `Metrics::sheet_tabs_h`, `tabs.rs::sheet_tabs`; tokens `tab_bar`, `tab_line`, `tab_active` |
 | Status bar | 27 pt, `#F2F2F2`, Ready left; view buttons, zoom slider and percentage right | `Metrics::status_bar_h`, `tabs.rs::status_bar`; token `status_bar` |
+| Default column / row | column 65 pt (64 + 1 pt gridline), row 16 pt (15 + 1) at 100% | `Metrics::col_scale` (`MAC_COL_SCALE` = 65/64) feeds `Geo::zx` (columns, x positions, drawings' widths); rows keep `Geo::z` (20 units = 16 pt). Windows and Linux keep one scale (64 units = 51.2 pt) |
 
 Not done or not measured:
 
-- Default column width 65 pt (64 + 1): the grid has one scale for both axes (rows 20 units to 16 pt);
-  a 64-unit column is 51.2 pt. A separate horizontal scale touches every `geo.z` use and is left out.
 - Minimum window size: not measured, left as it is.
 - Ribbon control heights are unchanged (23 and 72 pt); only the card, its insets and the stack spacing
   changed, so the controls nearly fill the 74 pt card. Rounded corner radius and the sizes of the view
@@ -288,6 +287,7 @@ Not done or not measured:
 | Date | Change | Summary |
 |---|---|---|
 | 2026-11-02 | minor | Form controls: buttons, sliders (scroll bars) and spin buttons placed, worked, selected and edited on the sheet (Insert › Controls, Assign Action, Format Control); catalog 281 / 296 |
+| 2026-11-09 | minor | Excel for Mac geometry: a default column is 65 pt wide at 100% (64 units, `Geo::zx`), rows stay 16 pt; column widths, x positions, hit-testing, frozen panes, scroll bars and the widths of pictures, charts and shapes follow the horizontal scale. Windows and Linux are unchanged |
 | 2026-11-03 | minor | Highlight the active cell's row: a global preference that tints the whole row, off by default |
 | 2026-11-03 | minor | The formula bar's bottom edge is a resize handle: dragging it sets the bar's height in whole lines, up to half the window, and dragging it to one line collapses it; expanding (the chevron, Ctrl+Shift+U) returns to the dragged height, which is kept with the UI preferences. `view.expandFormulaBar {lines}` sets it (#1246) |
 | 2026-11-03 | minor | Cell context menu on a cell with a link: Edit Hyperlink… (the link dialog, titled Edit Hyperlink and filled with the link), Open Hyperlink and Remove Hyperlink, as in Excel, instead of Link… (#2120) |

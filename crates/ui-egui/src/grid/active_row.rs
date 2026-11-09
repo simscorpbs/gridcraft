@@ -13,7 +13,7 @@ pub fn active_row_band(geo: &Geo, sh: &Sheet, row: u32, rows: (u32, u32), cols: 
         return None;
     }
     let top = geo.y(sh, row);
-    let right = geo.x(sh, cols.1) + sh.col_width(cols.1) * geo.z;
+    let right = geo.x(sh, cols.1) + sh.col_width(cols.1) * geo.zx;
     Some(Rect::from_min_max(pos2(geo.x(sh, cols.0), top), pos2(right, top + height)))
 }
 

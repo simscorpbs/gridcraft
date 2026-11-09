@@ -38,7 +38,7 @@ fn insert_id(kind: ControlKind) -> &'static str {
 /// The cell under a logical grid position and the offset into it, in sheet points.
 fn cell_point(geo: &Geo, sh: &Sheet, p: Pos2) -> (CellRef, f32, f32) {
     let (col, row) = (geo.col_at(sh, p.x), geo.row_at(sh, p.y));
-    let dx = ((p.x - geo.x(sh, col)) / geo.z).max(0.0);
+    let dx = ((p.x - geo.x(sh, col)) / geo.zx).max(0.0);
     let dy = ((p.y - geo.y(sh, row)) / geo.z).max(0.0);
     (CellRef::new(row, col), dx, dy)
 }
@@ -81,7 +81,7 @@ pub fn place(app: &mut SheetApp, ui: &Ui, resp: &egui::Response, geo: &Geo, sh: 
     let mut params = json!({"at": cell.a1(), "dx": dx, "dy": dy});
     // A drag sets the size (and a slider's orientation); a click keeps the default size.
     if rect.width() >= 6.0 || rect.height() >= 6.0 {
-        params["width"] = json!((rect.width() / geo.z).max(8.0));
+        params["width"] = json!((rect.width() / geo.zx).max(8.0));
         params["height"] = json!((rect.height() / geo.z).max(8.0));
         if kind == ControlKind::Slider {
             params["horizontal"] = json!(rect.width() >= rect.height());

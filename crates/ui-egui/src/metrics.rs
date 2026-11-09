@@ -17,6 +17,10 @@ pub const SHEET_PX_PER_PT: f32 = 96.0 / 72.0;
 /// multiplies sheet units by this and by the zoom; see `grid::DISPLAY_SCALE`.
 pub const DISPLAY_SCALE: f32 = 0.8;
 
+/// Points one sheet unit is drawn at horizontally on a Mac at 100%: Excel for Mac draws the default
+/// 64-unit column 65 points wide (64 plus the gridline), while a 20-unit row stays 16 points.
+pub const MAC_COL_SCALE: f32 = 65.0 / 64.0;
+
 /// Screen points a font point takes at 100% on the screen: Excel for Mac draws 11 pt text at 11
 /// screen points (72 per inch), Excel for Windows at 96 per inch.
 pub const MAC_SCREEN_PT_PER_FONT_PT: f32 = 1.0;
@@ -64,6 +68,9 @@ pub struct Metrics {
     pub share_button_h: Option<f32>,
     /// Screen points per font point at 100% zoom.
     pub screen_pt_per_font_pt: f32,
+    /// Screen points per sheet unit along a row (column widths, x positions) at 100% zoom; rows
+    /// use [`DISPLAY_SCALE`].
+    pub col_scale: f32,
 }
 
 impl Metrics {
@@ -89,6 +96,7 @@ impl Metrics {
         status_bar_h: 26.0,
         share_button_h: None,
         screen_pt_per_font_pt: STANDARD_SCREEN_PT_PER_FONT_PT,
+        col_scale: DISPLAY_SCALE,
     };
 
     /// Excel for Mac 16.x, light theme.
@@ -116,6 +124,7 @@ impl Metrics {
         status_bar_h: 27.0,
         share_button_h: Some(17.0),
         screen_pt_per_font_pt: MAC_SCREEN_PT_PER_FONT_PT,
+        col_scale: MAC_COL_SCALE,
     };
 
     /// The profile this build draws: Mac on macOS, standard elsewhere; a test can force Mac.

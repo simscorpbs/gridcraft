@@ -54,6 +54,16 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         }
         Geo::new(sh, rect, scroll)
     };
+    // Screen points per scroll unit, horizontally and vertically (they differ on a Mac).
+    let scroll_scale = |app: &mut SheetApp, paper: bool, scroll: egui::Vec2, percent: u16| -> egui::Vec2 {
+        if paper {
+            let g = make_geo(app, scroll);
+            vec2(g.zx, g.z)
+        } else {
+            let zoom = percent as f32 / 100.0;
+            vec2(zoom * crate::metrics::Metrics::current().col_scale, zoom * DISPLAY_SCALE)
+        }
+    };
     // Scrolling.
     let (scroll_delta, zoom_delta, modifiers, now) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers, i.time));
     if (resp.hovered() || resp.contains_pointer()) && !crate::text_box::contains_pointer(app, ui.ctx()) {
@@ -87,7 +97,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             }
             app.grid.wheel_zoom = Some(zooming);
         } else if scroll_delta != egui::Vec2::ZERO {
-            let z = if paper { make_geo(app, view.scroll).z } else { sh.zoom as f32 / 100.0 * DISPLAY_SCALE };
+            let z = scroll_scale(app, paper, view.scroll, sh.zoom);
             let mut d = scroll_delta;
             // A horizontal swipe moves the content the way the fingers go, which is towards
             // higher columns on a mirrored sheet.
@@ -97,7 +107,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
             if modifiers.shift && d.x == 0.0 {
                 d = vec2(d.y, 0.0);
             }
-            view.scroll -= d / z;
+            view.scroll -= vec2(d.x / z.x, d.y / z.y);
         }
     }
     // A one-finger touch drag pans the sheet, the content following the finger; it doesn't select.
@@ -106,12 +116,12 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         app.grid.touch_pan = true;
     }
     if app.grid.touch_pan && resp.dragged() && ui.input(|i| i.multi_touch().is_none()) {
-        let z = if paper { make_geo(app, view.scroll).z } else { sh.zoom as f32 / 100.0 * DISPLAY_SCALE };
+        let z = scroll_scale(app, paper, view.scroll, sh.zoom);
         let mut d = resp.drag_delta();
         if sh.right_to_left {
             d.x = -d.x;
         }
-        view.scroll -= d / z;
+        view.scroll -= vec2(d.x / z.x, d.y / z.y);
     }
     update_zoom_glide(app, ui, place, sh.zoom, now);
     view.scroll = view.scroll.max(egui::Vec2::ZERO);
@@ -122,7 +132,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         let g = make_geo(app, view.scroll);
         if let Some(pg) = &g.paper {
             let (ex, ey) = pg.extent();
-            max_x = if pg.cols_complete { (ex as f32 - g.cells.width() / g.z).max(0.0) } else { 1.0e9 };
+            max_x = if pg.cols_complete { (ex as f32 - g.cells.width() / g.zx).max(0.0) } else { 1.0e9 };
             max_y = if pg.rows_complete { (ey as f32 - g.cells.height() / g.z).max(0.0) } else { 1.0e9 };
         }
     }
@@ -309,9 +319,9 @@ impl<F: Fn(&mut SheetApp, egui::Vec2) -> Geo> ActiveCellVisibility<'_, F> {
         }
         if target.col >= geo.fc {
             if cr.left() < area.left() {
-                view.scroll.x -= (area.left() - cr.left()) / geo.z;
+                view.scroll.x -= (area.left() - cr.left()) / geo.zx;
             } else if cr.right() > area.right() - 2.0 {
-                view.scroll.x += ((cr.right() - area.right() + 2.0) / geo.z).min(cr.left() - area.left());
+                view.scroll.x += ((cr.right() - area.right() + 2.0) / geo.zx).min(cr.left() - area.left());
             }
         } else if from.is_some_and(|f| f.col >= geo.fc) {
             view.scroll.x = 0.0;
@@ -499,7 +509,7 @@ pub(crate) fn horizontal_scrollbar(app: &mut SheetApp, ui: &mut egui::Ui, track:
     let Some(geo) = app.grid.geo.clone() else { return };
     let Some(wb) = app.session.active().map(|d| d.wb.clone()) else { return };
     let Some(sh) = wb.active() else { return };
-    let visible = ((geo.cells.width() - geo.frozen_w) / geo.z).max(0.0);
+    let visible = ((geo.cells.width() - geo.frozen_w) / geo.zx).max(0.0);
     let scroll = app.view().scroll.x;
     let last = sh.used_range().map(|r| r.end.col.saturating_add(10)).unwrap_or(26).clamp(26, MAX_COLS - 1);
     let content = geo.scroll_left_of(sh, last);
@@ -534,7 +544,7 @@ pub(crate) fn horizontal_scrollbar(app: &mut SheetApp, ui: &mut egui::Ui, track:
     }
     if resp.hovered() {
         let d = ui.input(|i| i.smooth_scroll_delta);
-        next -= (if d.x != 0.0 { dir * d.x } else { d.y }) / geo.z;
+        next -= (if d.x != 0.0 { dir * d.x } else { d.y }) / geo.zx;
     }
     next = next.max(0.0);
     if next != scroll {
@@ -580,7 +590,7 @@ pub(crate) fn paint_headers(
                 if !done_cols.insert((c, clip.left() as i32)) {
                     continue;
                 }
-                let w = sh.col_width(c) * geo.z;
+                let w = sh.col_width(c) * geo.zx;
                 if w <= 0.0 {
                     continue;
                 }

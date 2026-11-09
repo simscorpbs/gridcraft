@@ -241,9 +241,9 @@ fn paint_shape_text(p: &Painter, wb: &Workbook, sp: &gridcraft_engine::model::Sh
 }
 
 pub(crate) fn anchor_rect(geo: &Geo, sh: &Sheet, a: &Anchor) -> Rect {
-    let x = geo.x(sh, a.cell.col) + a.dx * geo.z;
+    let x = geo.x(sh, a.cell.col) + a.dx * geo.zx;
     let y = geo.y(sh, a.cell.row) + a.dy * geo.z;
-    Rect::from_min_size(pos2(x, y), vec2(a.width * geo.z, a.height.max(1.0) * geo.z))
+    Rect::from_min_size(pos2(x, y), vec2(a.width * geo.zx, a.height.max(1.0) * geo.z))
 }
 
 /// The shapes one floating object painted (indices into the painter's layer) and its logical
@@ -319,7 +319,7 @@ pub(crate) fn paint_objects(app: &SheetApp, p: &Painter, geo: &Geo, wb: &Workboo
                 let pt = gridcraft_engine::cmd::draw::ink_width(sp);
                 let w = pt * geo.z;
                 let pts: Vec<Pos2> =
-                    gridcraft_engine::cmd::draw::ink_points(sp).iter().map(|q| pos2(r.left() + q[0] * geo.z, r.top() + q[1] * geo.z)).collect();
+                    gridcraft_engine::cmd::draw::ink_points(sp).iter().map(|q| pos2(r.left() + q[0] * geo.zx, r.top() + q[1] * geo.z)).collect();
                 if pts.len() >= 2 {
                     let col = ink_color(line, pt);
                     p.add(PathShape::line(pts, PathStroke::new(w, col)));
@@ -376,7 +376,7 @@ pub(crate) fn paint_objects(app: &SheetApp, p: &Painter, geo: &Geo, wb: &Workboo
         p.rect_filled(r, 0.0, Tokens::get(p.ctx()).grid_bg);
         let data = gridcraft_chart::resolve(wb, si, ch);
         let m = EguiMeasure { painter: p, z: geo.z };
-        let prims = gridcraft_chart::render(ch, &data, ch.anchor.width, ch.anchor.height, &m);
+        let prims = gridcraft_chart::render(ch, &data, ch.anchor.width * geo.zx / geo.z, ch.anchor.height, &m);
         paint_prims(&p.with_clip_rect(r.intersect(p.clip_rect())), r.min, &prims, geo.z);
         done(start, r);
     }
