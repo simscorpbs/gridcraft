@@ -11,6 +11,8 @@
 
 #[cfg(target_os = "macos")]
 mod apple_events;
+#[cfg(target_os = "macos")]
+mod color_space;
 mod control_server;
 #[cfg(any(target_os = "windows", target_os = "macos", test))]
 mod graphics;
@@ -396,6 +398,11 @@ fn main() -> eframe::Result<()> {
                     return Err("the app was already created".into());
                 };
                 SheetApp::setup_context_for_language(&cc.egui_ctx, app.ui.dark, app.ui.language);
+                // The window is colour-managed like other Mac apps': sRGB, converted to the display.
+                #[cfg(target_os = "macos")]
+                if !color_space::tag_window_srgb() {
+                    log::warn!("window colour space: no window to tag sRGB");
+                }
                 // iCloud Drive, Google Drive and OneDrive folders, for Save to Cloud and the file's provider.
                 {
                     let ctx = cc.egui_ctx.clone();
