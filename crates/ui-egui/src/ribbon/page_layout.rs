@@ -72,7 +72,7 @@ pub(super) fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
             "B5 (ISO)",
             "B6 (ISO)",
         ] {
-            if ui.button(p).clicked() {
+            if ui.button(crate::i18n::tr(ui, p)).clicked() {
                 act(app, "pageLayout.size", json!({"paper": p}));
             }
         }

@@ -223,6 +223,16 @@ impl Language {
         translated.unwrap_or_else(|| text.rsplit_once('|').map_or(text, |(_, label)| label))
     }
 
+    /// Translates `text`, then fills its named placeholders (`{count}`, `{n}`) from `args`; the
+    /// English text is filled the same way, so a placeholder row works in every language.
+    pub fn fmt(self, text: &str, args: &[(&str, impl AsRef<str>)]) -> String {
+        let mut out = self.tr(text).to_owned();
+        for (name, value) in args {
+            out = out.replace(&format!("{{{name}}}"), value.as_ref());
+        }
+        out
+    }
+
     pub(crate) fn tr_error(self, message: &str) -> String {
         let message = if message.starts_with("command `") { crate::clean_error(message) } else { message.to_owned() };
 
@@ -283,6 +293,17 @@ pub fn lenient<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Language, D::Er
 /// value), which starts from [`Language::system`] instead.
 pub fn saved_language(ui_json: &serde_json::Value) -> Option<Language> {
     ui_json.get("language").and_then(serde_json::Value::as_str).and_then(Language::parse)
+}
+
+/// Translates `text` for the language of the frame being drawn (English if untranslated); the
+/// short way to localise a literal at the place a widget is built.
+pub fn tr<'a>(ui: &egui::Ui, text: &'a str) -> &'a str {
+    current(ui.ctx()).tr(text)
+}
+
+/// [`Language::fmt`] for the language of the frame being drawn.
+pub fn fmt(ui: &egui::Ui, text: &str, args: &[(&str, impl AsRef<str>)]) -> String {
+    current(ui.ctx()).fmt(text, args)
 }
 
 /// egui context-data key holding the language of the frame being drawn. Widgets that only get a
@@ -405,6 +426,41 @@ mod tests {
                 assert!(!shown.contains('|'), "{} shows a context prefix for {english}: {shown}", language.code());
             }
         }
+    }
+
+    /// Brazilian Portuguese follows the names Excel's pt-BR users know: tabs, commands in title
+    /// case, and strings that used to fall back to English.
+    #[test]
+    fn brazilian_portuguese_uses_the_names_excel_users_know() {
+        let pt = Language::PtBr;
+        for (english, expected) in [
+            ("Home", "Página Inicial"),
+            ("Page Layout", "Layout da Página"),
+            ("Merge & Center", "Mesclar e Centralizar"),
+            ("Wrap Text", "Quebrar Texto Automaticamente"),
+            ("AutoSum", "AutoSoma"),
+            ("Strikethrough", "Tachado"),
+            ("Unmerge Cells", "Desfazer Mesclagem de Células"),
+            ("Comma Style", "Separador de Milhares"),
+            ("Show Formulas", "Mostrar Fórmulas"),
+            ("Goal Seek…", "Atingir Meta…"),
+            ("What-If\nAnalysis", "Teste de\nHipóteses"),
+            ("Color Scales", "Escalas de Cor"),
+            ("Table Design", "Design da Tabela"),
+            ("Tab Color", "Cor da Guia"),
+            ("Most Recently Used", "Usadas Recentemente"),
+            ("PivotTable Fields", "Campos da Tabela Dinâmica"),
+            ("Refresh", "Atualizar"),
+            ("Good", "Bom"),
+            ("Bad", "Ruim"),
+            ("Legal", "Ofício"),
+            ("Print failed: {error}", "Falha na impressão: {error}"),
+        ] {
+            assert_eq!(pt.tr(english), expected, "{english:?}");
+        }
+        // A reviewed row keeps its placeholders and its two-line shape.
+        assert!(pt.tr("Print job submitted: {receipt}").contains("{receipt}"));
+        assert_eq!(pt.tr("Arrange\nAll").lines().count(), 2);
     }
 
     #[test]

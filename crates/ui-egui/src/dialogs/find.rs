@@ -62,7 +62,7 @@ pub(super) fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
                 p["with"] = json!(with);
                 p["all"] = json!(true);
                 match app.run("edit.replace", p) {
-                    Ok(r) => app.toast = Some((format!("All done. We made {} replacements.", r["replaced"]), crate::now_ms())),
+                    Ok(r) => app.toast = Some((app.ui.language.fmt("All done. We made {count} replacements.", &[("count", r["replaced"].to_string())]), crate::now_ms())),
                     Err(e) => app.message = Some(("Find and Replace".into(), crate::clean_error(&e))),
                 }
             }
@@ -90,7 +90,7 @@ pub(super) fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
         && let Some(list) = r["results"].as_array()
     {
         ui.separator();
-        ui.label(format!("{} cell(s) found", list.len()));
+        ui.label(crate::i18n::fmt(ui, "{count} cell(s) found", &[("count", list.len().to_string())]));
         egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
             for item in list {
                 let label = format!(

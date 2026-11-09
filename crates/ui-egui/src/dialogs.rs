@@ -360,7 +360,7 @@ impl Dialog {
                     vec![
                         Number { key: "to", label: "Before sheet (position, 0 = first):" },
                         Check { key: "copy", label: "Create a copy" },
-                        Note(format!("Sheets: {}", sheets.join(", "))),
+                        Note(app.ui.language.fmt("Sheets: {sheets}", &[("sheets", sheets.join(", "))])),
                     ],
                     json!({"to": 0, "copy": false}),
                 );
@@ -413,7 +413,7 @@ impl Dialog {
                     "Allow Edit Ranges",
                     "review.allowEditRanges",
                     vec![
-                        Note(format!("Ranges that stay editable when the sheet is protected:\n{summary}")),
+                        Note(format!("{}\n{summary}", app.ui.language.tr("Ranges that stay editable when the sheet is protected:"))),
                         Choice {
                             key: "action",
                             label: "Action",
@@ -458,7 +458,7 @@ impl Dialog {
                     "openPassword",
                     "Password",
                     "file.open",
-                    vec![Note(format!("'{file}' is protected.")), Password { key: "password", label: "Password:" }],
+                    vec![Note(app.ui.language.fmt("'{file}' is protected.", &[("file", file.to_string())])), Password { key: "password", label: "Password:" }],
                     values,
                 )
             }
@@ -477,7 +477,7 @@ impl Dialog {
                     "unhideSheet",
                     "Unhide",
                     "sheet.unhide",
-                    vec![Text { key: "sheet", label: "Unhide sheet:" }, Note(format!("Hidden: {}", opts.join(", ")))],
+                    vec![Text { key: "sheet", label: "Unhide sheet:" }, Note(app.ui.language.fmt("Hidden: {sheets}", &[("sheets", opts.join(", "))]))],
                     json!({"sheet": first}),
                 );
                 d.values.insert("sheet".into(), json!(first));

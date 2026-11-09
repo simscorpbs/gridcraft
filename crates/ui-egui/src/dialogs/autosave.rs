@@ -91,7 +91,7 @@ pub(super) fn save_to_cloud(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialo
                     Err(e) => app.message = Some((d.title.clone(), crate::clean_error(&e))),
                 }
             }
-            None => app.message = Some((d.title.clone(), format!("Too many workbooks named {name} in {}", root.provider.name()))),
+            None => app.message = Some((d.title.clone(), app.ui.language.fmt("Too many workbooks named {name} in {provider}", &[("name", name.to_string()), ("provider", root.provider.name().to_string())]))),
         }
     }
 }
