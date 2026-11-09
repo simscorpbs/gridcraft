@@ -356,7 +356,7 @@ fn paint_cell(q: &QuadrantPaint<'_>, painted: &(CellRef, Rect, Look, Option<CfLo
         return;
     }
     // Align and clip header text inside the content area, away from the dropdown.
-    let filter_space = sh.filter_button_space(c) * z;
+    let filter_space = sh.filter_button_space(c) * geo.zx;
     let text_rect = Rect::from_min_max(rect.min, pos2((rect.right() - filter_space).max(rect.left()), rect.bottom()));
     let rect = &text_rect;
     let st = &lk.style;

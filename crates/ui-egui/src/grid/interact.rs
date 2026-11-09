@@ -224,7 +224,7 @@ fn handle_draw_tool(app: &mut SheetApp, input: &InteractionInput<'_>) -> bool {
             {
                 // Through the cell under the pointer, so frozen panes and pages map right.
                 let c = geo.cell_at(sh, p);
-                let sx = sh.col_left(c.col) as f32 + (p.x - geo.x(sh, c.col)) / geo.z;
+                let sx = sh.col_left(c.col) as f32 + (p.x - geo.x(sh, c.col)) / geo.zx;
                 let sy = sh.row_top(c.row) as f32 + (p.y - geo.y(sh, c.row)) / geo.z;
                 app.grid.ink.push([sx, sy]);
             }
@@ -237,7 +237,7 @@ fn handle_draw_tool(app: &mut SheetApp, input: &InteractionInput<'_>) -> bool {
                     .map(|q| {
                         let (col, row) = (sh.col_at(q[0].max(0.0) as f64), sh.row_at(q[1].max(0.0) as f64));
                         geo.mirror_pos(pos2(
-                            geo.x(sh, col) + (q[0] - sh.col_left(col) as f32) * geo.z,
+                            geo.x(sh, col) + (q[0] - sh.col_left(col) as f32) * geo.zx,
                             geo.y(sh, row) + (q[1] - sh.row_top(row) as f32) * geo.z,
                         ))
                     })
@@ -325,7 +325,7 @@ fn handle_column_header_press(app: &mut SheetApp, input: &InteractionInput<'_>, 
     let in_col_header = input.in_column_header;
     if in_col_header {
         if let Some((c, x)) = col_edge(geo, sh, p.x) {
-            app.grid.drag = Drag::ResizeCol { col: c, start: p.x, orig: sh.col_width(c).max(0.0) * 0.0 + (x - geo.x(sh, c)) / geo.z };
+            app.grid.drag = Drag::ResizeCol { col: c, start: p.x, orig: sh.col_width(c).max(0.0) * 0.0 + (x - geo.x(sh, c)) / geo.zx };
             return;
         }
         let c = geo.col_at(sh, p.x);
@@ -676,14 +676,14 @@ fn handle_dragging(app: &mut SheetApp, input: &InteractionInput<'_>) {
             }
             Drag::MoveCols { source, .. } => {
                 let col = geo.col_at(sh, p.x.clamp(geo.cells.left() + 1.0, geo.cells.right() - 1.0));
-                let midpoint = geo.x(sh, col) + sh.col_width(col) * geo.z * 0.5;
+                let midpoint = geo.x(sh, col) + sh.col_width(col) * geo.zx * 0.5;
                 let before = (col + u32::from(p.x >= midpoint)).min(MAX_COLS - 1);
                 let before = (!(source.start.col..=source.end.col + 1).contains(&before)).then_some(before);
                 app.grid.drag = Drag::MoveCols { source, before };
                 scroll_by(app, vec2(auto.x, 0.0));
             }
             Drag::ResizeCol { col, start, orig } => {
-                let w = (orig + (p.x - start) / geo.z).max(0.0);
+                let w = (orig + (p.x - start) / geo.zx).max(0.0);
                 app.toast =
                     Some((app.ui.language.fmt("Width: {width} ({pixels} pixels)", &[("width", format!("{:.2}", gridcraft_engine::cmd::format::points_to_chars(w as f64))), ("pixels", w.round().to_string())]), crate::now_ms()));
                 // Inside a selection of whole columns, every selected column takes the new width
@@ -1007,7 +1007,7 @@ fn freeze_boundary(geo: &Geo, sh: &Sheet, p: Pos2, cols: bool) -> u32 {
         let c = geo.col_at(sh, p.x);
         let (l, r) = (geo.x(sh, c), geo.x_end(sh, c));
         let b = if p.x - l > r - p.x { c.saturating_add(1) } else { c };
-        let room = geo.ci.at((((geo.cells.width() - 40.0) / geo.z).max(0.0)) as f64);
+        let room = geo.ci.at((((geo.cells.width() - 40.0) / geo.zx).max(0.0)) as f64);
         b.min(room).min(MAX_COLS - 1)
     } else {
         if p.y <= geo.cells.top() {
@@ -1030,7 +1030,7 @@ pub(super) fn paint_freeze_handles(p: &Painter, geo: &Geo, sh: &Sheet, drag: &Dr
     if let Drag::Freeze { cols, to: Some(to) } = *drag {
         let stroke = Stroke::new(2.0, t.accent);
         if cols {
-            let x = geo.cells.left() + sh.col_left(to) as f32 * geo.z;
+            let x = geo.cells.left() + sh.col_left(to) as f32 * geo.zx;
             p.line_segment([pos2(x, geo.head_top()), pos2(x, geo.cells.bottom())], stroke);
         } else {
             let y = geo.cells.top() + sh.row_top(to) as f32 * geo.z;
@@ -1042,7 +1042,7 @@ pub(super) fn paint_freeze_handles(p: &Painter, geo: &Geo, sh: &Sheet, drag: &Dr
 pub(super) fn col_edge(geo: &Geo, sh: &Sheet, x: f32) -> Option<(u32, f32)> {
     let c = geo.col_at(sh, x);
     for cc in [c, c.saturating_sub(1)] {
-        let edge = geo.x(sh, cc) + sh.col_width(cc) * geo.z;
+        let edge = geo.x(sh, cc) + sh.col_width(cc) * geo.zx;
         if (x - edge).abs() <= 4.0 {
             return Some((cc, edge));
         }
@@ -1075,7 +1075,7 @@ pub(super) fn hidden_row_edge(geo: &Geo, sh: &Sheet, y: f32) -> Option<u32> {
 /// (logical coordinates). The whole drag coalesces into one undo step of its own.
 fn drag_object(app: &mut SheetApp, geo: &Geo, sh: &Sheet, p: Pos2) {
     let Drag::Object { obj, start, orig, handle, stepped } = app.grid.drag.clone() else { return };
-    let d = (p - start) / geo.z;
+    let d = (p - start) / vec2(geo.zx, geo.z);
     let (cell, dx, dy, w, h) = orig;
     let x0 = sh.col_left(cell.col) as f32 + dx;
     let y0 = sh.row_top(cell.row) as f32 + dy;

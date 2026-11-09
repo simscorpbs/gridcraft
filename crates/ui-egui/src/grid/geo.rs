@@ -5,7 +5,11 @@ use super::{Arc, CellRef, DISPLAY_SCALE, LineIndex, MAX_COLS, MAX_ROWS, Pos2, Ra
 pub struct Geo {
     pub rect: Rect,
     pub cells: Rect,
+    /// Screen points per sheet unit vertically (rows, text, drawings' heights): `zoom * DISPLAY_SCALE`.
     pub z: f32,
+    /// Screen points per sheet unit horizontally (column widths, x positions): `zoom * col_scale`.
+    /// Equals `z` on Windows and Linux and in Page Layout view; on a Mac a 64-unit column is 65 pt.
+    pub zx: f32,
     pub header_w: f32,
     pub header_h: f32,
     /// The outline bands (grouped rows / columns): left of the row headers and above the column
@@ -36,6 +40,7 @@ impl Geo {
         let zoom = (sh.zoom as f32 / 100.0).clamp(0.1, 4.0);
         let z = zoom * DISPLAY_SCALE;
         let m = crate::metrics::Metrics::current();
+        let zx = zoom * m.col_scale;
         let header_h = if sh.show_headings { m.col_header_h_at(zoom) } else { 0.0 };
         let ri = std::sync::Arc::new(LineIndex::new(&sh.rows, sh.default_row_height, MAX_ROWS));
         let ci = std::sync::Arc::new(LineIndex::new(&sh.cols, sh.default_col_width, MAX_COLS));
@@ -43,7 +48,7 @@ impl Geo {
         let digits = (last_row as f32).log10().floor() as i32 + 1;
         let header_w = if sh.show_headings { m.row_header_w(digits, zoom) } else { 0.0 };
         let (fr, fc) = sh.freeze.unwrap_or((0, 0));
-        let frozen_w = (ci.start(fc) as f32) * z;
+        let frozen_w = (ci.start(fc) as f32) * zx;
         let frozen_h = (ri.start(fr) as f32) * z;
         let row_outline = Arc::new(crate::outline::Axis::of(sh, true));
         let col_outline = Arc::new(crate::outline::Axis::of(sh, false));
@@ -63,6 +68,7 @@ impl Geo {
             rect,
             cells,
             z,
+            zx,
             header_w,
             header_h,
             band_w,
@@ -94,6 +100,7 @@ impl Geo {
         let mut g = Geo::new(sh, rect, scroll);
         let zoom = (sh.zoom as f32 / 100.0).clamp(0.1, 4.0);
         g.z = zoom * DISPLAY_SCALE * grid.scale.clamp(0.1, 4.0);
+        g.zx = g.z;
         (g.fr, g.fc, g.frozen_w, g.frozen_h) = (0, 0, 0.0, 0.0);
         g.paper = Some(grid);
         g
@@ -105,7 +112,7 @@ impl Geo {
         }
         match &self.paper {
             Some(pg) => pg.on_cells(
-                self.scroll.x as f64 + ((p.x - self.cells.left()) / self.z) as f64,
+                self.scroll.x as f64 + ((p.x - self.cells.left()) / self.zx) as f64,
                 self.scroll.y as f64 + ((p.y - self.cells.top()) / self.z) as f64,
             ),
             None => true,
@@ -141,12 +148,12 @@ impl Geo {
     }
     pub fn x(&self, _sh: &Sheet, col: u32) -> f32 {
         if let Some(pg) = &self.paper {
-            return self.cells.left() + (pg.col_x(col) - self.scroll.x as f64) as f32 * self.z;
+            return self.cells.left() + (pg.col_x(col) - self.scroll.x as f64) as f32 * self.zx;
         }
         if col < self.fc {
-            self.cells.left() + self.ci.start(col) as f32 * self.z
+            self.cells.left() + self.ci.start(col) as f32 * self.zx
         } else {
-            self.cells.left() + self.frozen_w + (self.ci.start(col) as f32 - self.ci.start(self.fc) as f32 - self.scroll.x) * self.z
+            self.cells.left() + self.frozen_w + (self.ci.start(col) as f32 - self.ci.start(self.fc) as f32 - self.scroll.x) * self.zx
         }
     }
     pub fn y(&self, _sh: &Sheet, row: u32) -> f32 {
@@ -162,7 +169,7 @@ impl Geo {
     /// Screen x of `col`'s right edge. Not `x(col + 1)`: across the freeze line (and between
     /// pages) the next column is laid out elsewhere (#2544).
     pub fn x_end(&self, sh: &Sheet, col: u32) -> f32 {
-        self.x(sh, col) + sh.col_width(col) * self.z
+        self.x(sh, col) + sh.col_width(col) * self.zx
     }
     /// Screen y of `row`'s bottom edge (see `x_end`).
     pub fn y_end(&self, sh: &Sheet, row: u32) -> f32 {
@@ -182,13 +189,13 @@ impl Geo {
     }
     pub fn col_at(&self, _sh: &Sheet, x: f32) -> u32 {
         if let Some(pg) = &self.paper {
-            return pg.col_at(self.scroll.x as f64 + ((x - self.cells.left()) / self.z) as f64);
+            return pg.col_at(self.scroll.x as f64 + ((x - self.cells.left()) / self.zx) as f64);
         }
-        let dx = (x - self.cells.left()) / self.z;
-        if dx < self.frozen_w / self.z {
+        let dx = (x - self.cells.left()) / self.zx;
+        if dx < self.frozen_w / self.zx {
             self.ci.at(dx.max(0.0) as f64)
         } else {
-            self.ci.at(self.ci.start(self.fc) + self.scroll.x as f64 + (dx - self.frozen_w / self.z) as f64)
+            self.ci.at(self.ci.start(self.fc) + self.scroll.x as f64 + (dx - self.frozen_w / self.zx) as f64)
         }
     }
     pub fn row_at(&self, _sh: &Sheet, y: f32) -> u32 {
@@ -215,7 +222,7 @@ impl Geo {
     pub(super) fn scroll_cols(&self, _sh: &Sheet) -> (u32, u32) {
         let left = self.ci.start(self.fc) + self.scroll.x as f64;
         let c0 = self.ci.at(left).max(self.fc);
-        let c1 = self.ci.at(left + ((self.cells.width() - self.frozen_w) / self.z) as f64).min(MAX_COLS - 1);
+        let c1 = self.ci.at(left + ((self.cells.width() - self.frozen_w) / self.zx) as f64).min(MAX_COLS - 1);
         (c0, c1)
     }
     /// Screen areas of the panes (frozen rows/columns or the scrolling part) that hold part of `r`.

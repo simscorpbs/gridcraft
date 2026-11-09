@@ -395,3 +395,69 @@ fn header_labels_that_do_not_fit_are_left_out_and_never_overlap() {
     let (cols, rows) = header_labels(100);
     assert!(cols.len() >= 20 && rows.len() >= 40, "{} columns, {} rows", cols.len(), rows.len());
 }
+
+/// Column widths on a Mac: a default 64-unit column is 65 pt wide at 100% (Excel for Mac), rows keep
+/// their 16 pt, and Windows/Linux keep the scale they always had.
+mod column_width_scale {
+    use super::super::{Geo, Rect, Sheet, pos2};
+    use crate::metrics::force_mac;
+
+    fn geo_of(sh: &Sheet) -> Geo {
+        Geo::new(sh, Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(1400.0, 900.0)), egui::Vec2::ZERO)
+    }
+
+    #[test]
+    fn a_default_column_is_65_points_on_a_mac_and_rows_stay_16() {
+        let _mac = force_mac();
+        let sh = Sheet::new("S");
+        let geo = geo_of(&sh);
+        assert!((geo.x(&sh, 1) - geo.x(&sh, 0) - 65.0).abs() < 1e-3, "column A: {}", geo.x(&sh, 1) - geo.x(&sh, 0));
+        assert!((geo.x(&sh, 2) - geo.x(&sh, 0) - 130.0).abs() < 1e-3, "B starts one column in, C two");
+        assert!((geo.y(&sh, 1) - geo.y(&sh, 0) - 16.0).abs() < 1e-3);
+        assert!((geo.x_end(&sh, 0) - geo.x(&sh, 1)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn standard_keeps_its_numbers() {
+        let sh = Sheet::new("S");
+        let geo = geo_of(&sh);
+        assert_eq!(geo.zx, geo.z);
+        assert!((geo.x(&sh, 1) - geo.x(&sh, 0) - 51.2).abs() < 1e-3);
+        assert!((geo.y(&sh, 1) - geo.y(&sh, 0) - 16.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn a_click_in_column_c_hits_column_c_at_mac_scale() {
+        let _mac = force_mac();
+        let sh = Sheet::new("S");
+        let geo = geo_of(&sh);
+        let left = geo.cells.left();
+        assert_eq!(geo.col_at(&sh, left + 129.0), 1, "just before C starts at 130 pt");
+        assert_eq!(geo.col_at(&sh, left + 131.0), 2);
+        assert_eq!(geo.col_at(&sh, left + 194.0), 2);
+        assert_eq!(geo.col_at(&sh, left + 196.0), 3);
+        assert_eq!(geo.cell_at(&sh, pos2(left + 140.0, geo.cells.top() + 20.0)).a1(), "C2");
+    }
+
+    #[test]
+    fn frozen_columns_follow_the_column_scale() {
+        let _mac = force_mac();
+        let mut sh = Sheet::new("S");
+        sh.freeze = Some((0, 2));
+        let geo = geo_of(&sh);
+        assert!((geo.frozen_w - 130.0).abs() < 1e-3, "{}", geo.frozen_w);
+    }
+
+    #[test]
+    fn a_picture_anchored_a1_to_c3_spans_the_mac_widths() {
+        let _mac = force_mac();
+        let sh = Sheet::new("S");
+        let geo = geo_of(&sh);
+        let a = gridcraft_engine::model::Anchor { width: 3.0 * 64.0, height: 3.0 * 20.0, ..Default::default() };
+        let r = crate::chartview::anchor_rect(&geo, &sh, &a);
+        assert!((r.width() - 195.0).abs() < 1e-3, "{}", r.width());
+        assert!((r.height() - 48.0).abs() < 1e-3, "{}", r.height());
+        assert!((r.right() - geo.x(&sh, 3)).abs() < 1e-3, "the right edge meets column D");
+        assert!((r.bottom() - geo.y(&sh, 3)).abs() < 1e-3, "the bottom edge meets row 4");
+    }
+}

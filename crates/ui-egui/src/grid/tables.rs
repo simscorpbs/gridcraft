@@ -5,7 +5,7 @@ pub fn filter_button_rect(geo: &Geo, sh: &Sheet, c: CellRef) -> Rect {
     let rect = geo.cell_rect(sh, c);
     // Keep the button within the same header slot that AutoFit reserves.
     let pad = 2.0 * geo.z;
-    let s = (rect.height() - 4.0).clamp(10.0, 18.0).min((sh.filter_button_space(c) * geo.z - pad).max(0.0));
+    let s = (rect.height() - 4.0).clamp(10.0, 18.0).min((sh.filter_button_space(c) * geo.zx - pad).max(0.0));
     Rect::from_min_size(pos2(rect.right() - s - pad, rect.bottom() - s - pad), vec2(s, s))
 }
 
@@ -48,7 +48,7 @@ pub fn table_headings(geo: &Geo, sh: &Sheet, active: CellRef) -> Vec<TableHeadin
     let af = sh.autofilter.as_ref().filter(|af| af.range == tb.range);
     let mut out = Vec::new();
     for col in tb.range.start.col..=tb.range.end.col {
-        let w = sh.col_width(col) * geo.z;
+        let w = sh.col_width(col) * geo.zx;
         let off = col - tb.range.start.col;
         let Some(column) = tb.columns.get(off as usize) else { continue };
         if w <= 0.0 {
