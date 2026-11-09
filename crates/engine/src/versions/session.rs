@@ -120,10 +120,22 @@ impl Session {
         history_id(doc, doc.path.as_deref().map(Path::new))
     }
 
-    /// The versions of the active workbook, newest first.
+    /// The workbook whose history the active workbook shows, and its file: the active workbook
+    /// itself, or, while a previous version is shown, the workbook that version came from (when it
+    /// is still open and saved).
+    pub fn history_source(&self) -> Option<(u64, PathBuf)> {
+        let d = self.active()?;
+        match &d.version {
+            Some(v) => self.history_doc(v.source_uid).map(|source| (source.uid, PathBuf::from(&v.source_path))),
+            None => d.path.clone().map(|p| (d.uid, PathBuf::from(p))),
+        }
+    }
+
+    /// The versions of the active workbook (or of the workbook a previous version comes from),
+    /// newest first.
     pub fn version_infos(&mut self) -> Vec<VersionInfo> {
         self.versions_tick();
-        let Some((uid, path)) = self.active().and_then(|d| d.path.clone().map(|p| (d.uid, PathBuf::from(p)))) else { return Vec::new() };
+        let Some((uid, path)) = self.history_source() else { return Vec::new() };
         let id = self.version_document_id(uid);
         let cloud = self.cloud_roots.clone();
         match self.version_store.as_mut() {
@@ -242,7 +254,9 @@ impl Session {
         let package = is_package(path);
         let own = doc.path.as_deref().is_some_and(|own| same_file_path(Path::new(own), path));
         let private = doc.wb.remove_personal_info;
-        let has_file = doc.path.is_some();
+        // A previous version saved as a copy is a new file from a document that has one.
+        let opened_version = doc.version.as_ref().map(|v| v.id.clone());
+        let has_file = doc.path.is_some() || opened_version.is_some();
         let current = doc.history.id.clone().filter(|id| meta::document_id_ok(id));
         let stamp_changed =
             own && doc.stamp.as_ref().is_some_and(|stamp| !matches!(stamp.clone().check(path), Ok(gridcraft_cloud::DiskState::Unchanged)));
@@ -256,7 +270,7 @@ impl Session {
             let previous = current.as_deref().and_then(|cur| self.version_store.as_ref().and_then(|s| s.newest(path, cur, &cloud)));
             if !own && has_file {
                 // A new file from this document.
-                origin = Some(VersionOrigin { document_id: current.clone(), version_id: previous.map(|(v, _)| v) });
+                origin = Some(VersionOrigin { document_id: current.clone(), version_id: opened_version.or_else(|| previous.map(|(v, _)| v)) });
                 kind = kind.or(Some(VersionKind::SaveAs));
                 trigger = if kind == Some(VersionKind::ConflictCopy) { "conflictCopy".into() } else { "saveAs".into() };
             } else if let Some(cur) = current.clone() {
@@ -403,8 +417,8 @@ impl Session {
 
     /// Delete the active workbook's history, or all history, in every history folder.
     pub fn delete_version_history(&mut self, scope: DeleteScope) -> Result<usize, String> {
-        let (document, path) = match self.active() {
-            Some(d) => (self.version_document_id(d.uid), d.path.clone().map(PathBuf::from)),
+        let (document, path) = match self.history_source() {
+            Some((uid, path)) => (self.version_document_id(uid), Some(path)),
             None => (None, None),
         };
         let store = self.version_store.as_mut().ok_or_else(|| "local version history is unavailable".to_string())?;

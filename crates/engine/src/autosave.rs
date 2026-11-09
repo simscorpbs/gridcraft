@@ -245,6 +245,8 @@ pub enum AutoSaveBlock {
     /// Another device or program changed the file (or moved or deleted it, `missing`) since it was
     /// last read or written here; AutoSave waits for the user to choose what to keep.
     Conflict { missing: bool },
+    /// A previous version opened from Version History: it has no file of its own and cannot change.
+    PreviousVersion,
 }
 
 impl AutoSaveBlock {
@@ -261,12 +263,13 @@ impl AutoSaveBlock {
                 "AutoSave is paused: this file was changed on another device. Choose which version to keep.".into()
             }
             AutoSaveBlock::Conflict { missing: true } => "AutoSave is paused: this file was moved or deleted elsewhere. Choose what to do.".into(),
+            AutoSaveBlock::PreviousVersion => "AutoSave doesn't apply to a previous version.".into(),
         }
     }
 
     /// Whether Save As can lift the block (everywhere but the browser, and not while a conflict waits).
     pub fn save_as_helps(&self) -> bool {
-        !matches!(self, AutoSaveBlock::Browser | AutoSaveBlock::Conflict { .. })
+        !matches!(self, AutoSaveBlock::Browser | AutoSaveBlock::Conflict { .. } | AutoSaveBlock::PreviousVersion)
     }
 }
 
@@ -277,6 +280,9 @@ impl crate::DocState {
     pub fn autosave_block(&self) -> Option<AutoSaveBlock> {
         if cfg!(target_arch = "wasm32") {
             return Some(AutoSaveBlock::Browser);
+        }
+        if self.version.is_some() {
+            return Some(AutoSaveBlock::PreviousVersion);
         }
         let Some(path) = self.path.as_deref() else { return Some(AutoSaveBlock::Unsaved) };
         if !keeps_everything(path, self.content_kind) {

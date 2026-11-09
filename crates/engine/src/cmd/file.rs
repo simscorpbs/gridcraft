@@ -10,6 +10,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(noundo "file.new", "New Workbook", ["File"], Some("Cmd+N"), "{sample?: \"budget\"|\"sales\"|\"grades\"}", always, new_workbook),
         cmd!(noundo "file.open", "Open…", ["File"], Some("Cmd+O"), "{path} | {name, base64}, plus {password} for a password-protected workbook and {csvAsText?: bool} to keep every csv/tsv/txt field as text, with no number or date conversion (xlsx, xlsm, xls import, xlsb and ods data import, csv, tsv, txt, json)", always, open),
         cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?, ifUnchanged?: bool, trigger?: string} (xlsx by default; .csv/.tsv/.json/.html/.pdf by extension; AutoSave sends `ifUnchanged`: the workbook's own file is written only if no other device or program changed it since it was read or written here, else nothing is written and the result has `conflict` (changed or missing), see file.resolveConflict; `trigger` says what asked for the save, recorded in the version history, e.g. `close`) → {saved, path, bytes}. In the desktop app the workbook's own file also gets a version in its history (file.versions)", has_doc, save),
+        cmd!(noundo "file.rename", "Rename", ["File", "Info"], None, "{name} → {renamed, path, from}: renames the active workbook's file on disk, in its folder (the title-bar file menu). `name` is the new file name; without the file's extension it is added. The file keeps its version history, its AutoSave switch and its place in the list. Refuses a name that already exists, one with a folder or characters Windows does not allow, and a workbook with no file", has_doc, rename),
         cmd!(noundo "file.saveAs", "Save As…", ["File"], Some("Cmd+Shift+S"), "{path} (.xlsx, .csv, .tsv, .json, .html, or .pdf: a PDF of the active sheet)", has_doc, save_as),
         cmd!(query "file.saveBytes", "Encode Workbook", [], None, "{format?: xlsx|csv|tsv|json|html} → {base64}", has_doc, save_bytes),
         cmd!(noundo "file.close", "Close", ["File"], Some("Cmd+W"), "{force?: bool, document?: bool} (closes the active window, or with `document` the workbook and all its windows; the workbook closes with its last window)", has_doc, close),
@@ -31,7 +32,17 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
+/// New, Open and Close while a previous version is shown first go back to the current workbook,
+/// so what follows (a new workbook, the Save Changes question) starts from it.
+fn leave_previous_version(s: &mut Session) -> Result<()> {
+    if let Some(uid) = s.active().filter(|d| d.is_previous_version()).map(|d| d.uid) {
+        s.close_previous_version(uid);
+    }
+    Ok(())
+}
+
 fn new_workbook(s: &mut Session, p: &Json) -> Result<Json> {
+    leave_previous_version(s)?;
     let i = match str_param(p, "sample") {
         Some(name) => {
             let wb = crate::sample::build(name).ok_or_else(|| bad("file.new", format!("unknown sample `{name}`")))?;
@@ -44,6 +55,7 @@ fn new_workbook(s: &mut Session, p: &Json) -> Result<Json> {
 }
 
 pub(super) fn open(s: &mut Session, p: &Json) -> Result<Json> {
+    leave_previous_version(s)?;
     let (name, bytes) = if let Some(b) = str_param(p, "base64") {
         (str_param(p, "name").unwrap_or("Book.xlsx").to_string(), crate::io::base64_decode(b).ok_or_else(|| bad("file.open", "invalid base64"))?)
     } else if let Some(path) = str_param(p, "path") {
@@ -225,6 +237,13 @@ fn save_bytes(s: &mut Session, p: &Json) -> Result<Json> {
 
 /// File › Close closes the active window; the workbook closes with its last window.
 fn close(s: &mut Session, p: &Json) -> Result<Json> {
+    // Closing a previous version stops there, as closing its window would: the current workbook
+    // comes back as it was, and a further Close asks about its changes as usual.
+    if let Some(d) = s.active().filter(|d| d.is_previous_version()) {
+        let uid = d.uid;
+        s.close_previous_version(uid);
+        return Ok(json!({"closed": true, "version": true}));
+    }
     if !bool_param(p, "document").unwrap_or(false)
         && let Some(id) = s.active_window()
         && let Some(doc) = s.window(id).map(|w| w.doc_uid)
@@ -484,4 +503,73 @@ fn close_window(s: &mut Session, p: &Json) -> Result<Json> {
     }
     s.close_window(id);
     Ok(json!({"closed": true, "document": true}))
+}
+
+/// Characters a file name may not have on any system we run on, plus path separators.
+#[cfg(not(target_arch = "wasm32"))]
+const BAD_NAME_CHARS: &[char] = &['/', '\\', '<', '>', ':', '"', '|', '?', '*'];
+
+#[cfg(not(target_arch = "wasm32"))]
+/// The file name `typed` makes for a file that had extension `ext`: the extension is added when
+/// the name does not already end with it. `None` for a name that cannot be a file name.
+pub(crate) fn renamed_file_name(typed: &str, ext: Option<&str>) -> Option<String> {
+    let name = typed.trim().trim_end_matches('.');
+    if name.is_empty() || name == "." || name == ".." || name.chars().any(|c| c.is_control() || BAD_NAME_CHARS.contains(&c)) {
+        return None;
+    }
+    let name = match ext {
+        Some(ext) if !ext.is_empty() && !name.to_lowercase().ends_with(&format!(".{}", ext.to_lowercase())) => format!("{name}.{ext}"),
+        _ => name.to_string(),
+    };
+    (name.len() <= 255).then_some(name)
+}
+
+/// `file.rename`: the file moves to its new name; its history, AutoSave switch and disk stamp
+/// follow. The browser has no files.
+#[cfg(target_arch = "wasm32")]
+fn rename(_: &mut Session, _: &Json) -> Result<Json> {
+    Err(EngineError::Disabled("file.rename".into(), "files can only be renamed in the desktop app".into()))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn rename(s: &mut Session, p: &Json) -> Result<Json> {
+    use std::path::{Path, PathBuf};
+
+    let typed = str_param(p, "name").ok_or_else(|| bad("file.rename", "missing `name`"))?;
+    let d = s.doc()?;
+    let uid = d.uid;
+    let from = d.path.clone().ok_or_else(|| EngineError::Disabled("file.rename".into(), "save the workbook first: it has no file to rename".into()))?;
+    let from_path = PathBuf::from(&from);
+    let ext = from_path.extension().map(|e| e.to_string_lossy().into_owned());
+    let name = renamed_file_name(typed, ext.as_deref())
+        .ok_or_else(|| bad("file.rename", "that is not a file name: it needs a name without folders or the characters / \\ : * ? \" < > |"))?;
+    let to_path = from_path.with_file_name(&name);
+    let to = to_path.to_string_lossy().into_owned();
+    if to == from {
+        return Ok(json!({"renamed": false, "path": from, "from": from}));
+    }
+    if !crate::io::file_access_allowed(&to) {
+        return Err(EngineError::Other(format!("{to}: scripts, and macro steps without the permission, can't read or write files")));
+    }
+    // A name only in its case is the same file on Windows and macOS: that rename is allowed.
+    let same_file = crate::autosave::file_key(&from_path).is_some() && crate::autosave::file_key(&from_path) == crate::autosave::file_key(&to_path);
+    if !same_file && (to_path.exists() || s.documents().iter().any(|o| o.path.as_deref().is_some_and(|op| Path::new(op) == to_path))) {
+        return Err(EngineError::Other(format!("a file named {name} already exists in that folder")));
+    }
+    // The AutoSave choice is remembered under the file's canonical path: take it before the move.
+    let canonical_from = std::fs::canonicalize(&from_path).unwrap_or_else(|_| from_path.clone());
+    std::fs::rename(&from_path, &to_path).map_err(|e| EngineError::Other(format!("{from}: {e}")))?;
+    s.autosave_memory.rename(&canonical_from, &to_path);
+    let d = s.doc_mut()?;
+    let dirty = d.is_dirty();
+    d.path = Some(to.clone());
+    if d.wb.source_path.is_some() {
+        let file = crate::io::source_path(&to);
+        std::sync::Arc::make_mut(&mut d.wb).source_path = file;
+        if !dirty {
+            d.saved = d.wb.clone();
+        }
+    }
+    s.versions_renamed(uid, from_path, &to_path);
+    Ok(json!({"renamed": true, "path": to, "from": from}))
 }

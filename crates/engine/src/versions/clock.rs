@@ -48,6 +48,41 @@ pub fn local_timestamp(saved_at: &str) -> String {
         .map_or_else(|| saved_at.to_owned(), |t| t.format("%Y-%m-%d %H:%M").to_string())
 }
 
+/// A version's time on the computer's clock, with how many calendar days before today it falls:
+/// what the Version History pane groups and headlines versions by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LocalWhen {
+    pub year: i32,
+    pub month: u32,
+    pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
+    /// Calendar days from this day to the day of `now` (0: today, 1: yesterday; negative: later).
+    pub days_ago: i64,
+}
+
+/// [`local_when_at`] for the present moment; `None` for an unreadable timestamp.
+pub fn local_when(saved_at: &str) -> Option<LocalWhen> {
+    local_when_at(saved_at, now_unix())
+}
+
+/// `saved_at` (UTC, as versions store it) on the local clock, counted against the day of `now`
+/// (seconds since the epoch).
+pub fn local_when_at(saved_at: &str, now: u64) -> Option<LocalWhen> {
+    use chrono::{Datelike, Timelike};
+    let local = |secs: u64| i64::try_from(secs).ok().and_then(|s| Local.timestamp_opt(s, 0).single());
+    let then = local(parse_iso_timestamp(saved_at)?)?;
+    let today = local(now)?;
+    Some(LocalWhen {
+        year: then.year(),
+        month: then.month(),
+        day: then.day(),
+        hour: then.hour(),
+        minute: then.minute(),
+        days_ago: today.date_naive().signed_duration_since(then.date_naive()).num_days(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1049,6 +1049,28 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
             "O Salvamento Automático mantém salvas as pastas de trabalho .xlsx, .xlsm e .xltx enquanto você trabalha, neste computador ou no iCloud Drive, Google Drive ou OneDrive. A chave da barra de título o define para um arquivo."
         }
         "Version History" => "Histórico de Versões",
+        "Open version" => "Abrir versão",
+        "Restore" => "Restaurar",
+        "Save a copy" => "Salvar uma cópia",
+        "Compare" => "Comparar",
+        "Previous version" => "Versão anterior",
+        "Not saved" => "Não salvo",
+        "File name" => "Nome do arquivo",
+        "Folder" => "Pasta",
+        "File name and Version History" => "Nome do arquivo e Histórico de Versões",
+        "Back to the current version" => "Voltar para a versão atual",
+        "Show the previous version again" => "Mostrar a versão anterior novamente",
+        "Show what changed since this version" => "Mostrar o que mudou desde esta versão",
+        "Version history is kept by the desktop app." => "O histórico de versões é mantido pelo aplicativo para computador.",
+        "Save the workbook to start its version history." => "Salve a pasta de trabalho para iniciar o histórico de versões.",
+        "No versions yet." => "Ainda não há versões.",
+        "AutoSave doesn't apply to a previous version." => "O Salvamento Automático não se aplica a uma versão anterior.",
+        "This is a previous version. Restore it or save a copy to make changes." => {
+            "Esta é uma versão anterior. Restaure-a ou salve uma cópia para fazer alterações."
+        }
+        "Browse earlier versions of this workbook, open or restore one." => {
+            "Veja as versões anteriores desta pasta de trabalho, abra ou restaure uma."
+        }
         "Version history folder:" => "Pasta do histórico de versões:",
         "Not set: the settings folder" => "Não definida: a pasta de configurações",
         "Apply" => "Aplicar",

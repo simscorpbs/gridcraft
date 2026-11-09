@@ -188,10 +188,30 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 ui.min_rect().left()
             });
             // Centred title, cut with "…" so it never runs under the controls on either side.
-            let title = app.session.active().map(|d| d.display_title()).unwrap_or_default();
+            let title = app.session.active().map(|d| crate::versions_pane::shown_title(app, &d.display_title())).unwrap_or_default();
             let dirty = app.session.active().is_some_and(|d| d.is_dirty());
             let max_w = title_max_width(rect.center().x, left_end, right.inner);
-            paint_title(ui, rect.center(), &title, dirty, max_w, t.text);
+            let title_rect = paint_title(ui, rect.center(), &title, dirty, max_w, t.text);
+            // Clicking the name, with either button, opens the file menu: the file name (which can
+            // be changed there), its folder, and Version History.
+            if app.session.active().is_some() {
+                let hit = ui.interact(title_rect.expand2(vec2(8.0, 4.0)), ui.scope_id().with("title_file_menu"), Sense::click());
+                let label = app.ui.language.tr("File name and Version History");
+                hit.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+                // One popup for both buttons: a click toggles it, a right click opens it.
+                let open = if hit.secondary_clicked() {
+                    Some(egui::SetOpenCommand::Bool(true))
+                } else if hit.clicked() {
+                    Some(egui::SetOpenCommand::Toggle)
+                } else {
+                    None
+                };
+                // The name field is inside it: clicking in the menu must not close it.
+                egui::Popup::menu(&hit)
+                    .open_memory(open)
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                    .show(|ui| crate::versions_pane::file_menu(app, ui));
+            }
         });
     });
 }
@@ -232,19 +252,21 @@ fn title_max_width(center_x: f32, left_end: f32, right_start: f32) -> f32 {
     (2.0 * half).max(0.0)
 }
 
-/// Paint the workbook title centred on `center`, truncated with "…" to `max_w`. The unsaved
-/// marker stays visible however short the title gets.
-fn paint_title(ui: &Ui, center: egui::Pos2, title: &str, dirty: bool, max_w: f32, color: Color32) {
+/// Paint the workbook title centred on `center`, truncated with "…" to `max_w`, and return the
+/// space it took. The unsaved marker stays visible however short the title gets.
+fn paint_title(ui: &Ui, center: egui::Pos2, title: &str, dirty: bool, max_w: f32, color: Color32) -> egui::Rect {
     let (galley, dot) = title_galleys(ui.painter(), title, dirty, max_w, color);
     let dot_w = dot.as_ref().map_or(0.0, |g| g.size().x);
     let w = galley.size().x + dot_w;
     let left = center.x - w / 2.0;
     let top = center.y - galley.size().y / 2.0;
     let galley_w = galley.size().x;
+    let height = galley.size().y;
     ui.painter().galley(pos2(left, top), galley, color);
     if let Some(dot) = dot {
         ui.painter().galley(pos2(left + galley_w, top), dot, color);
     }
+    egui::Rect::from_min_size(pos2(left, top), vec2(w, height))
 }
 
 #[cfg(test)]

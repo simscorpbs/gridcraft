@@ -26,6 +26,7 @@ pub mod record;
 pub mod sample;
 pub mod selection;
 pub mod tables;
+pub mod version_view;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod versions;
 pub mod windows;
@@ -237,6 +238,9 @@ pub struct DocState {
     /// A conflict AutoSave found and nobody has resolved yet: the file `changed` or went
     /// `missing`. AutoSave does not write while one waits.
     pub conflict: Option<gridcraft_cloud::DiskState>,
+    /// `Some` when this workbook is a previous version opened from Version History: read only,
+    /// beside the workbook it came from ([`version_view`]).
+    pub version: Option<version_view::VersionView>,
     /// What the version history knows about this workbook: the id its file carries and when this
     /// editing session began ([`versions`]).
     #[cfg(not(target_arch = "wasm32"))]
@@ -350,6 +354,7 @@ impl DocState {
             autosave: true,
             stamp: None,
             conflict: None,
+            version: None,
             #[cfg(not(target_arch = "wasm32"))]
             history: versions::DocHistory { id: None, opened_at: versions::now_unix() },
         }
@@ -625,6 +630,9 @@ impl Session {
     /// leaves a draft that can't be entered (and so blocks saving).
     pub fn locked_cell_message(&self, sheet: usize, at: CellRef) -> Option<String> {
         let d = self.active()?;
+        if d.is_previous_version() {
+            return Some(version_view::READ_ONLY.to_string());
+        }
         let sh = d.wb.sheet(sheet)?;
         if !sh.is_protected() || !d.wb.styles.get(sh.style_id(at)).protection.locked {
             return None;
@@ -720,6 +728,10 @@ impl Session {
     /// Panics inside commands are caught and reported; the workbook is restored.
     pub fn execute(&mut self, id: &str, params: Json) -> Result<Json> {
         let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        // A previous version from Version History can't be changed: that reason comes first.
+        if let Some(why) = version_view::refusal(self, spec) {
+            return Err(EngineError::Disabled(id.to_string(), why.to_string()));
+        }
         if let Err(why) = (spec.enabled)(self) {
             return Err(EngineError::Disabled(id.to_string(), why));
         }
@@ -827,6 +839,7 @@ impl Session {
                 return Err(EngineError::Internal(id.to_string(), msg));
             }
         };
+        let result = version_view::keep_read_only(self, id, before.as_ref().map(|(uid, wb, _)| (*uid, wb)), result);
         // A command that fails leaves none of its own undo groups open (a `?` between
         // `group_begin` and `group_end`): each is rolled back as `group_rollback` does. Only a
         // command that succeeds keeps a group it opened (a debugger's start).

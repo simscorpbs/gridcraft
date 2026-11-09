@@ -55,6 +55,8 @@ impl SheetApp {
             return r;
         }
         let before = self.session.active_window();
+        // A version opens in a window of its own, with the Version History pane still beside it.
+        let keep_versions_pane = id == "file.openVersion" && self.grid.pane.as_deref() == Some(crate::versions_pane::PANE);
         let zoom_from = matches!(id, "view.zoom" | "view.zoom100" | "view.zoomToSelection").then(|| crate::grid::Trace::key(self));
         let r = self.session.run(id, params);
         if let Some(from) = zoom_from {
@@ -66,6 +68,9 @@ impl SheetApp {
         }
         // Requests the command made (a dialog, a draft) belong to the window it left active.
         self.follow_active_window();
+        if keep_versions_pane && r.is_ok() && self.session.previous_version().is_some() {
+            self.grid.pane = Some(crate::versions_pane::PANE.into());
+        }
         self.after_engine();
         if id == "formulas.autoSum"
             && let Some(ed) = self.editor.as_mut()
@@ -135,7 +140,7 @@ impl SheetApp {
     }
 
     /// Shows a command error: a toast for an unavailable command, else a message box.
-    pub(super) fn alert(&mut self, e: String) {
+    pub(crate) fn alert(&mut self, e: String) {
         // Shown in the window the user ends up in, also after a command that switched windows.
         self.follow_active_window();
         if e.contains("is not available right now") {
@@ -418,6 +423,16 @@ impl SheetApp {
                 {
                     let name = r.get("name").and_then(Json::as_str).unwrap_or("Book.xlsx").to_string();
                     dl(&name, &b);
+                }
+            }
+            // Save a copy of the previous version shown: ask where, then `file.saveVersionCopy`.
+            "saveVersionCopy" => {
+                let suggested = self.session.active().map(|d| d.display_title()).unwrap_or_else(|| "Book1.xlsx".into());
+                if let Some(pick) = &self.services.pick_save
+                    && let Some(path) = pick(&suggested)
+                {
+                    let path = if std::path::Path::new(&path).extension().is_none() { format!("{path}.xlsx") } else { path };
+                    self.run_or_alert("file.saveVersionCopy", json!({"path": path}));
                 }
             }
             // File › Options (`file.options`) and the File tab itself open the Backstage view.
