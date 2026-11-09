@@ -24,6 +24,40 @@ impl SheetApp {
         ctx.copy_text(text.to_string());
     }
 
+    /// Paste item `index` of the Clipboard pane (all of them, oldest first, with `None`) at the
+    /// active cell, and put it on the system clipboard too, so the next Paste repeats it.
+    pub fn paste_from_history(&mut self, ctx: &egui::Context, index: Option<usize>) {
+        let html = self.services.copy_html.is_some();
+        let result = match index {
+            Some(i) => self.run_command("edit.pasteClipboardItem", json!({"index": i, "html": html})),
+            None => self.run_command("edit.pasteAllClipboard", json!({"html": html})),
+        };
+        match result {
+            Ok(r) => {
+                self.grid.ensure_visible = true;
+                if let Some(text) = r.get("text").and_then(Json::as_str) {
+                    self.publish_copy(ctx, text, r.get("html").and_then(Json::as_str));
+                }
+            }
+            Err(e) => self.alert(e),
+        }
+    }
+
+    /// Put a copy on the system clipboard (its HTML flavour too when the host can publish it).
+    fn publish_copy(&mut self, ctx: &egui::Context, text: &str, html: Option<&str>) {
+        // The system clipboard gets this copy, so its text decides what Paste pastes.
+        self.clipboard_text_at_copy = None;
+        if let Some(html) = html
+            && let Some(copy_html) = &mut self.services.copy_html
+        {
+            match copy_html(html, text) {
+                Ok(()) => return,
+                Err(error) => log::warn!("HTML clipboard unavailable; copying plain text: {error}"),
+            }
+        }
+        ctx.copy_text(text.to_string());
+    }
+
     /// Paste text that came from the system clipboard (Cmd/Ctrl+V, or the ribbon and menu Paste),
     /// with the clipboard's HTML flavour when the host can read it.
     ///

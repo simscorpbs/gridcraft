@@ -6,6 +6,30 @@ pub(super) fn sep(ui: &mut Ui) {
     ui.painter().line_segment([pos2(r.center().x, r.top() + 6.0), pos2(r.center().x, r.bottom() - 6.0)], Stroke::new(1.0, t.separator));
 }
 
+/// A group's dialog launcher: the small corner arrow at the bottom of a ribbon group, which opens
+/// that group's dialog or task pane.
+pub(super) fn launcher(ui: &mut Ui, tip: &str) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
+    let (rect, resp) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click());
+    if resp.is_pointer_button_down_on() {
+        ui.painter().rect_filled(rect, 2.0, t.pressed);
+    } else if resp.hovered() {
+        ui.painter().rect_filled(rect, 2.0, t.hover);
+    }
+    let stroke = Stroke::new(1.0, t.text_dim);
+    let c = rect.center();
+    // An L-shaped corner with an arrow towards the bottom right, as Office draws it.
+    ui.painter().line_segment([pos2(c.x - 4.0, c.y - 4.0), pos2(c.x + 4.0, c.y - 4.0)], stroke);
+    ui.painter().line_segment([pos2(c.x - 4.0, c.y - 4.0), pos2(c.x - 4.0, c.y + 4.0)], stroke);
+    ui.painter().line_segment([pos2(c.x - 1.0, c.y - 1.0), pos2(c.x + 4.0, c.y + 4.0)], stroke);
+    ui.painter().line_segment([pos2(c.x + 4.0, c.y + 4.0), pos2(c.x + 4.0, c.y + 1.0)], stroke);
+    ui.painter().line_segment([pos2(c.x + 4.0, c.y + 4.0), pos2(c.x + 1.0, c.y + 4.0)], stroke);
+    let name = tip.to_string();
+    resp.widget_info(move || egui::WidgetInfo::labeled(egui::Role::Button, true, name.clone()));
+    let tip = crate::i18n::current(ui.ctx()).tr(tip).to_string();
+    resp.on_hover_text(tip)
+}
+
 pub(super) fn active_style(app: &SheetApp) -> Style {
     app.session
         .active()

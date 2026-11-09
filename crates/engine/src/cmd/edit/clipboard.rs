@@ -233,12 +233,24 @@ fn slide_together(wb: &gridcraft_model::Workbook, sheet: usize, areas: &[RangeRe
     Some((out, block))
 }
 
+/// Copy and Cut also collect the copy for the Clipboard task pane (Drag and Drop, which cuts
+/// internally, does not).
 pub(super) fn copy(s: &mut Session, p: &Json) -> Result<Json> {
-    copy_impl(s, p, false)
+    let r = copy_impl(s, p, false)?;
+    collect(s);
+    Ok(r)
 }
 
 pub(super) fn cut(s: &mut Session, p: &Json) -> Result<Json> {
-    copy_impl(s, p, true)
+    let r = copy_impl(s, p, true)?;
+    collect(s);
+    Ok(r)
+}
+
+fn collect(s: &mut Session) {
+    if let Some(clip) = &s.clipboard {
+        s.clip_history.push(clip);
+    }
 }
 
 pub(super) fn clear_clipboard(s: &mut Session, _: &Json) -> Result<Json> {
@@ -282,7 +294,7 @@ pub(super) fn range_move(s: &mut Session, p: &Json) -> Result<Json> {
     let sheet = target_sheet(s, p)?;
     let to = cell_param_on(s, p, "to", sheet)?.ok_or_else(|| bad("range.move", "missing `to`"))?;
     let kept = s.clipboard.take();
-    let moved = cut(s, p).and_then(|_| {
+    let moved = copy_impl(s, p, true).and_then(|_| {
         let src = s.clipboard.as_ref().map(|c| c.range).unwrap_or_default();
         let dest = to.offset(i64::from(src.height()) - 1, i64::from(src.width()) - 1).map(|end| RangeRef::new(to, end));
         if bool_param(p, "overwrite") != Some(true)

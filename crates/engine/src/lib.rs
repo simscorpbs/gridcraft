@@ -10,6 +10,7 @@ pub mod autosave;
 pub mod catalog;
 pub mod cf;
 mod chart_svg;
+pub mod clip_history;
 mod clip_html;
 pub mod cmd;
 pub mod display;
@@ -511,6 +512,8 @@ pub struct Session {
     /// Window activation counter (most recently used order).
     activation: u64,
     pub clipboard: Option<Clipboard>,
+    /// The copies and cuts made this session, for the Clipboard task pane.
+    pub clip_history: clip_history::ClipHistory,
     pub prefs: Prefs,
     pub mode: Mode,
     /// Commands run so far, without their passwords ([`cmd::journal_params`]).

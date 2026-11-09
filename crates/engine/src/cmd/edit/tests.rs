@@ -580,3 +580,131 @@ fn find_and_replace_within_the_selection() {
     let all = s.execute("edit.find", json!({"what": "pear", "all": true})).unwrap();
     assert_eq!(all["count"], 3, "A1, A3 and A4 on the whole sheet");
 }
+
+// ---------------------------------------------------------------- Clipboard pane
+
+fn clip_sheet() -> Session {
+    let mut s = Session::new();
+    s.new_workbook();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["one"], ["two"], ["three"]]})).unwrap();
+    s
+}
+
+fn copy_cell(s: &mut Session, cell: &str) {
+    s.execute("selection.set", json!({"range": cell})).unwrap();
+    s.execute("edit.copy", json!({})).unwrap();
+}
+
+fn previews(s: &mut Session) -> Vec<String> {
+    let items = s.execute("edit.clipboardItems", json!({})).unwrap();
+    items.as_array().unwrap().iter().map(|i| i["preview"].as_str().unwrap().to_string()).collect()
+}
+
+fn shown(s: &Session, cell: &str) -> String {
+    s.doc().unwrap().wb.active().unwrap().value(CellRef::parse(cell).unwrap()).display()
+}
+
+#[test]
+fn clipboard_pane_collects_copies_and_cuts_newest_first() {
+    let mut s = clip_sheet();
+    for c in ["A1", "A2", "A3"] {
+        copy_cell(&mut s, c);
+    }
+    // The same copy again, with the workbook untouched, adds nothing.
+    s.execute("edit.copy", json!({})).unwrap();
+    assert_eq!(previews(&mut s), ["three", "two", "one"]);
+    // A cut is collected too, and shown as cut; the history keeps it as a copy.
+    s.execute("selection.set", json!({"range": "A1"})).unwrap();
+    s.execute("edit.cut", json!({})).unwrap();
+    let items = s.execute("edit.clipboardItems", json!({})).unwrap();
+    assert_eq!(items[0]["cut"], true);
+    assert_eq!(items[0]["range"], "Sheet1!A1");
+    assert!(!s.clip_history.items()[0].clip.cut);
+    // Drag and drop cuts internally and is not a copy of the person's.
+    let before = s.clip_history.len();
+    s.execute("range.move", json!({"range": "A3", "to": "C3"})).unwrap();
+    assert_eq!(s.clip_history.len(), before);
+}
+
+#[test]
+fn clipboard_pane_keeps_24_and_drops_the_oldest() {
+    let mut s = Session::new();
+    s.new_workbook();
+    let rows: Vec<Vec<String>> = (0..30).map(|i| vec![format!("w{i}")]).collect();
+    s.execute("range.setValues", json!({"range": "A1", "values": rows})).unwrap();
+    for i in 1..=30 {
+        copy_cell(&mut s, &format!("A{i}"));
+    }
+    let p = previews(&mut s);
+    assert_eq!(p.len(), crate::clip_history::CLIP_MAX_ITEMS);
+    assert_eq!(p[0], "w29");
+    assert_eq!(p[23], "w6", "the oldest drop out");
+}
+
+#[test]
+fn clipboard_pane_pastes_an_old_item_as_a_copy_and_makes_it_the_clipboard() {
+    let mut s = clip_sheet();
+    copy_cell(&mut s, "A1");
+    s.execute("selection.set", json!({"range": "A2"})).unwrap();
+    s.execute("edit.cut", json!({})).unwrap();
+    copy_cell(&mut s, "A3");
+    // Index 1 is the cut of "two": pasted as a copy, so A2 keeps its value.
+    s.execute("selection.set", json!({"range": "C1"})).unwrap();
+    let r = s.execute("edit.pasteClipboardItem", json!({"index": 1, "html": true})).unwrap();
+    assert_eq!(shown(&s, "C1"), "two");
+    assert_eq!(shown(&s, "A2"), "two", "an old cut pastes as a copy");
+    assert_eq!(r["text"], "two\n");
+    assert!(r["html"].as_str().unwrap().contains("<table"));
+    assert_eq!(s.clipboard.as_ref().map(|c| (c.text.clone(), c.cut)), Some(("two\n".into(), false)));
+    assert_eq!(s.clip_history.len(), 3, "pasting an item doesn't add one");
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!(shown(&s, "C1"), "");
+    // Bad indexes are refused and change nothing.
+    for bad in [json!({"index": 3}), json!({"index": -1}), json!({"index": "x"}), json!({})] {
+        assert!(s.execute("edit.pasteClipboardItem", bad.clone()).is_err(), "{bad}");
+        assert!(s.execute("edit.deleteClipboardItem", bad.clone()).is_err(), "{bad}");
+    }
+    assert_eq!(s.clip_history.len(), 3);
+}
+
+#[test]
+fn clipboard_pane_paste_all_goes_oldest_first_in_one_undo_step() {
+    let mut s = clip_sheet();
+    for c in ["A1", "A2", "A3"] {
+        copy_cell(&mut s, c);
+    }
+    s.execute("selection.set", json!({"range": "C1"})).unwrap();
+    s.execute("edit.pasteAllClipboard", json!({})).unwrap();
+    assert_eq!([shown(&s, "C1"), shown(&s, "C2"), shown(&s, "C3")], ["one", "two", "three"]);
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!([shown(&s, "C1"), shown(&s, "C2"), shown(&s, "C3")], ["", "", ""], "Paste All is one undo step");
+}
+
+#[test]
+fn clipboard_pane_deletes_one_and_clears_all() {
+    let mut s = clip_sheet();
+    assert!(s.execute("edit.clearClipboardItems", json!({})).is_err(), "nothing to clear");
+    for c in ["A1", "A2", "A3"] {
+        copy_cell(&mut s, c);
+    }
+    let left = s.execute("edit.deleteClipboardItem", json!({"index": 1})).unwrap();
+    assert_eq!(left.as_array().unwrap().len(), 2);
+    assert_eq!(previews(&mut s), ["three", "one"]);
+    s.execute("edit.clearClipboardItems", json!({})).unwrap();
+    assert!(s.clip_history.is_empty());
+    assert!(s.clipboard.is_some(), "the live clipboard stays");
+    assert!(s.execute("edit.pasteClipboardItem", json!({"index": 0})).is_err());
+    assert!(s.execute("edit.pasteAllClipboard", json!({})).is_err());
+}
+
+#[test]
+fn clipboard_pane_previews_the_first_cells() {
+    let mut s = Session::new();
+    s.new_workbook();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["Name", "Score"], ["Ada", 42], ["Bob", 7], ["Cy", 1]]})).unwrap();
+    s.execute("selection.set", json!({"range": "A1:B4"})).unwrap();
+    s.execute("edit.copy", json!({})).unwrap();
+    let items = s.execute("edit.clipboardItems", json!({})).unwrap();
+    assert_eq!(items[0]["preview"], "Name  Score / Ada  42 / Bob  7 …");
+    assert_eq!((items[0]["rows"].as_u64(), items[0]["cols"].as_u64()), (Some(4), Some(2)));
+}

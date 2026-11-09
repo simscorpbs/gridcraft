@@ -5,8 +5,8 @@ use gridcraft_model::{Cell, Formula, StyleId};
 use serde_json::{Value as Json, json};
 
 use super::{
-    CommandSpec, EngineError, Result, bad, bool_param, can_redo, can_undo, cell_param, cell_param_on, cmd, edit, f64_param, has_clipboard, has_doc,
-    locked_cell_error, ok, split_sheet, str_param, target_range, target_ranges, target_sheet, u32_param,
+    CommandSpec, EngineError, Result, bad, bool_param, can_redo, can_undo, cell_param, cell_param_on, cmd, edit, f64_param, has_clip_history,
+    has_clipboard, has_doc, locked_cell_error, ok, split_sheet, str_param, target_range, target_ranges, target_sheet, u32_param,
 };
 use crate::selection::{current_region, jump};
 use crate::{Clipboard, Session};
@@ -16,6 +16,7 @@ mod clipboard;
 mod fill;
 mod find;
 mod go_to;
+mod history;
 mod paste_special;
 mod selection;
 
@@ -34,6 +35,7 @@ pub use go_to::go_to_names;
 use go_to::go_to_special;
 #[cfg(test)]
 use go_to::{GO_TO_MAX_AREAS, GO_TO_RECENT, reference_parts};
+use history::{clear_history, delete_item, history_items, paste_all, paste_item};
 use paste_special::paste_special;
 pub(crate) use paste_special::{rewrite_all_formulas, rewrite_cell_links, rewrite_python_refs};
 use selection::{select_all, select_col, select_region, select_row, selection_move, selection_next, selection_next_corner, selection_set};
@@ -111,6 +113,51 @@ pub fn specs() -> Vec<CommandSpec> {
                 paste_special
             )
         },
+        cmd!(
+            query "edit.clipboardItems",
+            "Clipboard Items",
+            ["Home", "Clipboard", "Clipboard Pane"],
+            None,
+            "{} → [{index, preview, range, rows, cols, cut}] (the last 24 copies and cuts of this session, newest first; index 0 = newest)",
+            has_doc,
+            history_items
+        ),
+        cmd!(
+            "edit.pasteClipboardItem",
+            "Paste Clipboard Item",
+            ["Home", "Clipboard", "Clipboard Pane"],
+            None,
+            "{index: n (0 = newest), at?: \"C3\", html?: bool} → {pasted, text, html?} (pastes an earlier copy or cut as a copy; it also becomes the clipboard, text and html are for the system clipboard)",
+            has_clip_history,
+            paste_item
+        ),
+        cmd!(
+            "edit.pasteAllClipboard",
+            "Paste All",
+            ["Home", "Clipboard", "Clipboard Pane"],
+            None,
+            "{at?: \"C3\", html?: bool} → {pasted, text, html?} (every collected item, oldest first, one below the other; one undo step)",
+            has_clip_history,
+            paste_all
+        ),
+        cmd!(
+            noundo "edit.deleteClipboardItem",
+            "Delete Clipboard Item",
+            ["Home", "Clipboard", "Clipboard Pane"],
+            None,
+            "{index: n (0 = newest)} → the items left",
+            has_clip_history,
+            delete_item
+        ),
+        cmd!(
+            noundo "edit.clearClipboardItems",
+            "Clear All",
+            ["Home", "Clipboard", "Clipboard Pane"],
+            None,
+            "{} (empties the Clipboard pane; the copy on the clipboard stays)",
+            has_clip_history,
+            clear_history
+        ),
         cmd!(noundo "edit.clearClipboard", "Cancel Copy", [], Some("Escape"), "{}", has_doc, clear_clipboard),
         cmd!("edit.clearAll", "Clear All", ["Home", "Editing", "Clear"], None, "{range?}", has_doc, |s, p| clear(s, p, "all")),
         cmd!("edit.clearFormats", "Clear Formats", ["Home", "Editing", "Clear"], None, "{range?}", has_doc, |s, p| clear(s, p, "formats")),

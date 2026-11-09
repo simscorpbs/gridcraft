@@ -19,6 +19,7 @@ pub mod backstage;
 mod border_preview;
 mod cell_pictures;
 pub mod chartview;
+pub mod clipboard_pane;
 pub mod code_editor;
 pub mod control;
 pub mod control_ui;
