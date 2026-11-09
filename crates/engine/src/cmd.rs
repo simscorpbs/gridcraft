@@ -25,6 +25,7 @@ pub mod slicer;
 pub mod solver;
 pub mod spelling;
 pub mod stash;
+pub mod version_view;
 pub mod versions;
 pub mod view;
 pub mod whatif;
@@ -91,7 +92,7 @@ impl CommandInfo {
 
 impl CommandSpec {
     pub fn info(&self, s: &Session) -> CommandInfo {
-        let e = (self.enabled)(s);
+        let e = crate::version_view::refusal(s, self).map_or_else(|| (self.enabled)(s), |why| Err(why.to_string()));
         CommandInfo {
             id: self.id,
             label: self.label,
@@ -166,6 +167,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(file::specs());
         v.extend(cloud::specs());
         v.extend(versions::specs());
+        v.extend(version_view::specs());
         v.extend(edit::specs());
         v.extend(format::specs());
         v.extend(sheet::specs());

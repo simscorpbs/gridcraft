@@ -34,7 +34,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, mpsc};
 
-pub use clock::local_timestamp;
+pub use clock::{LocalWhen, local_timestamp, local_when, local_when_at};
 use clock::parse_iso_timestamp;
 
 /// A version's origin.

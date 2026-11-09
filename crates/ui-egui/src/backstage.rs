@@ -222,7 +222,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                     Page::Home => home(app, ui, &mut bs, &mut out),
                     Page::New => new_page(app, ui, &mut out),
                     Page::Open => open_page(app, ui, &mut bs, &mut out),
-                    Page::Info => info(app, ui, &mut bs),
+                    Page::Info => info(app, ui, &mut bs, &mut out),
                     Page::SaveAs => save_as(app, ui, &mut bs, &mut out),
                     Page::Print => print(app, ui, &mut bs, &mut out),
                     Page::Export => export(app, ui, &mut out),
@@ -601,7 +601,7 @@ pub fn protect_workbook(app: &mut SheetApp) {
 }
 
 /// Shows the workbook title, path, sheet count and structure protection, plus editable document properties. Committing a changed field after it loses focus runs `file.properties`.
-fn info(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage) {
+fn info(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage, out: &mut Outcome) {
     let t = Tokens::get(ui.ctx());
     let lang = app.ui.language;
     let Some(d) = app.session.active() else {
@@ -644,6 +644,12 @@ fn info(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage) {
             dim(ui, lang.tr(text));
         });
     });
+    ui.add_space(14.0);
+    // The history pane opens beside the sheet, so the Backstage view gives way to it.
+    if action_row(ui, Icon::Clock, lang.tr("Version History"), lang.tr("Browse earlier versions of this workbook, open or restore one.")).clicked() {
+        crate::versions_pane::open_pane(app);
+        out.close = true;
+    }
     ui.add_space(22.0);
     section(ui, lang, "Properties");
     egui::Grid::new("backstage_props").num_columns(2).spacing(vec2(18.0, 8.0)).show(ui, |ui| {

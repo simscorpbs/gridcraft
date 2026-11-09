@@ -20,6 +20,7 @@ pub fn block_reason(lang: Language, block: &AutoSaveBlock) -> String {
         AutoSaveBlock::Conflict { missing: false } => {
             lang.tr("AutoSave is paused: this file was changed on another device. Click to choose which version to keep.").into()
         }
+        AutoSaveBlock::PreviousVersion => lang.tr("AutoSave doesn't apply to a previous version.").into(),
         AutoSaveBlock::Conflict { missing: true } => {
             lang.tr("AutoSave is paused: this file was moved or deleted elsewhere. Click to choose what to do.").into()
         }

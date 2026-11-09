@@ -19,6 +19,8 @@ impl SheetApp {
             crate::macro_editor::request_close(self, true);
             return;
         }
+        // A previous version shown never hides a workbook's unsaved work: the workbooks come back.
+        self.session.close_previous_versions();
         if !self.session.documents().iter().any(|d| d.is_dirty()) {
             return;
         }
@@ -98,6 +100,8 @@ impl SheetApp {
     /// window; Cancel on any of them stops the quit. A draft its
     /// workbook refuses stops the quit too, with its window in front and the reason shown.
     pub fn request_quit(&mut self, ctx: &egui::Context) {
+        // A previous version shown never hides a workbook's unsaved work: the workbooks come back.
+        self.session.close_previous_versions();
         while let Some(window) = self.parked_window_with_draft() {
             self.enter_window(window);
             if self.settle_drafts().is_err() {
