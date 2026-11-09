@@ -7,10 +7,10 @@ pub(super) fn name_manager(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog
     let selected = names.get(d.list_index).cloned();
     let field = |n: &Json, k: &str| n.get(k).and_then(Json::as_str).unwrap_or("").to_string();
     ui.horizontal(|ui| {
-        if ui.button("New…").clicked() {
+        if ui.button(crate::i18n::tr(ui, "New…")).clicked() {
             app.open_dialog("defineName", json!({}));
         }
-        if ui.add_enabled(selected.is_some(), egui::Button::new("Edit…")).clicked()
+        if ui.add_enabled(selected.is_some(), egui::Button::new(crate::i18n::tr(ui, "Edit…"))).clicked()
             && let Some(n) = &selected
         {
             app.open_dialog(
@@ -21,7 +21,7 @@ pub(super) fn name_manager(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog
                 }),
             );
         }
-        if ui.add_enabled(selected.is_some(), egui::Button::new("Delete")).clicked()
+        if ui.add_enabled(selected.is_some(), egui::Button::new(crate::i18n::tr(ui, "Delete"))).clicked()
             && let Some(n) = &selected
         {
             app.run_or_alert("formulas.deleteName", json!({"name": field(n, "name"), "scope": field(n, "scope")}));
@@ -30,13 +30,13 @@ pub(super) fn name_manager(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog
     ui.add_space(4.0);
     egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
         egui::Grid::new("names").striped(true).num_columns(4).show(ui, |ui| {
-            ui.strong("Name");
-            ui.strong("Value");
-            ui.strong("Refers To");
-            ui.strong("Scope");
+            ui.strong(crate::i18n::tr(ui, "Name"));
+            ui.strong(crate::i18n::tr(ui, "Value"));
+            ui.strong(crate::i18n::tr(ui, "Refers To"));
+            ui.strong(crate::i18n::tr(ui, "Scope"));
             ui.end_row();
             if names.is_empty() {
-                ui.label(egui::RichText::new("No names defined").italics());
+                ui.label(egui::RichText::new(crate::i18n::tr(ui, "No names defined")).italics());
                 ui.end_row();
             }
             for (i, n) in names.iter().enumerate() {
@@ -52,7 +52,7 @@ pub(super) fn name_manager(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog
     });
     ui.add_space(8.0);
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        if ui.button(" Close ").clicked() {
+        if ui.button(format!(" {} ", crate::i18n::tr(ui, "Close"))).clicked() {
             *open = false;
         }
     });

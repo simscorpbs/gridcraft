@@ -13,7 +13,7 @@ pub(super) fn command_search(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dial
         )
     });
     let width = ui.available_width();
-    let r = ui.add(egui::TextEdit::singleline(&mut d.search).desired_width(width).hint_text("Type a command, e.g. freeze, chart, bold…"));
+    let r = ui.add(egui::TextEdit::singleline(&mut d.search).desired_width(width).hint_text(crate::i18n::tr(ui, "Type a command, e.g. freeze, chart, bold…")));
 
     if !d.focus_initialized {
         r.request_focus();

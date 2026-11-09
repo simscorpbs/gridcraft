@@ -55,7 +55,7 @@ pub(super) fn automate(app: &mut SheetApp, ui: &mut Ui) {
             ui.separator();
         }
         if macros.is_empty() {
-            ui.label(egui::RichText::new("No macros in this workbook").italics().color(t.text_dim));
+            ui.label(egui::RichText::new(crate::i18n::tr(ui, "No macros in this workbook")).italics().color(t.text_dim));
         }
         for (n, desc, _) in macros.iter().take(30) {
             let r = ui.add(egui::Button::new(n.as_str()).frame(false).min_size(vec2(200.0, 22.0)));
