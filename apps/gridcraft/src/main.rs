@@ -123,6 +123,9 @@ fn load_prefs(app: &mut SheetApp) {
     {
         app.session.prefs = p;
     }
+    // The AutoSave switch each file was left with (`gridcraft_engine::autosave`); read after the
+    // preferences, which hold the default for files with no choice of their own.
+    app.session.enable_autosave_memory(dir.join("autosave.json"));
 }
 
 fn save_prefs(app: &SheetApp) {
@@ -390,6 +393,11 @@ fn main() -> eframe::Result<()> {
                     return Err("the app was already created".into());
                 };
                 SheetApp::setup_context_for_language(&cc.egui_ctx, app.ui.dark, app.ui.language);
+                // iCloud Drive, Google Drive and OneDrive folders, for Save to Cloud and the file's provider.
+                {
+                    let ctx = cc.egui_ctx.clone();
+                    app.discover_cloud(std::sync::Arc::new(move || ctx.request_repaint()));
+                }
                 if let Some(port) = control_port {
                     match control_server::start(port, control_token.clone(), cc.egui_ctx.clone()) {
                         Ok(rx) => app.control_rx = Some(rx),

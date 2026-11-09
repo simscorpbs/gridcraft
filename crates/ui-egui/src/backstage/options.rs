@@ -1,7 +1,7 @@
 use super::{Key, Language, Modifiers, SheetApp, Ui, dim, i18n, json, section, vec2};
 
 /// Excel's File › Options page: General (display theme, interface language and Show formula bar),
-/// Editing (AutoComplete) and Save (the autosave checkbox toggling `app.ui.autosave`), plus Formulas
+/// Editing (AutoComplete) and Save (the Turn on AutoSave by default checkbox, `file.options` with `autosaveByDefault`), plus Formulas
 /// (calculation mode and iterative calculation) and the display options for this workbook (sheet
 /// tabs and scroll bars) when a document is active. Theme, language, formula
 /// bar, AutoComplete and calculation changes run their commands through `run_or_alert`; calculation
@@ -27,10 +27,11 @@ pub(super) fn options(app: &mut SheetApp, ui: &mut Ui) {
     }
     ui.add_space(18.0);
     section(ui, lang, "Options|Save");
-    let mut autosave = app.ui.autosave;
-    if ui.checkbox(&mut autosave, lang.tr("Save .xlsx workbooks automatically after every change")).changed() {
-        app.toggle_autosave();
+    let mut autosave = app.session.prefs.autosave_by_default;
+    if ui.checkbox(&mut autosave, lang.tr("Turn on AutoSave by default")).changed() {
+        app.set_autosave_by_default(autosave);
     }
+    dim(ui, lang.tr("AutoSave keeps .xlsx, .xlsm and .xltx workbooks saved as you work, on this computer or in iCloud Drive, Google Drive or OneDrive. The title-bar switch sets it for one file."));
     let Some((calc, view)) = app.session.active().map(|d| (d.wb.calc.clone(), d.wb.view)) else { return };
     ui.add_space(18.0);
     // Excel's Advanced › Display options for this workbook: saved with the workbook (#3101).

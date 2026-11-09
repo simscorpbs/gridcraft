@@ -1,5 +1,3 @@
-#[cfg(test)]
-use super::clock::monotonic_ms;
 use super::clock::now_ms;
 use super::services::{Chrome, Services};
 use super::state::{NoticeKind, OpenWindow, SaveAnswer, SheetView};
@@ -11,6 +9,7 @@ use super::{
     keytips, macro_ui, panes, pivot_pane, printing, ribbon, tabs, text_box, theme, widgets,
 };
 
+mod autosave;
 mod clipboard;
 mod commands;
 mod editing;
@@ -27,7 +26,9 @@ mod view;
 
 impl SheetApp {
     /// Constructs a `SheetApp` with default UI, grid, printing, control and screenshot state and the caller's session and services.
-    pub fn new(session: Session, services: Services) -> SheetApp {
+    pub fn new(mut session: Session, services: Services) -> SheetApp {
+        // The interface runs AutoSave: closing a changed workbook writes it first.
+        session.autosave_host = true;
         SheetApp {
             session,
             ui: UiState::default(),
@@ -85,6 +86,10 @@ impl SheetApp {
             arrange_windows: None,
             #[cfg(not(target_arch = "wasm32"))]
             updates_rt: Default::default(),
+            autosaver: Default::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            cloud_discovery: None,
+            conflict_asked: Default::default(),
         }
     }
 
@@ -146,6 +151,13 @@ impl SheetApp {
         updates_ui::tick(self, ctx);
         // Files read asynchronously (web file picker, dropped files).
         self.poll_async_opens();
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(rx) = &self.cloud_discovery
+            && let Ok(roots) = rx.try_recv()
+        {
+            self.session.cloud_roots = roots;
+            self.cloud_discovery = None;
+        }
         self.autosave(ctx);
         self.update_title(ctx);
         self.request_hidden_paint(ctx);
@@ -479,17 +491,16 @@ mod lifecycle_tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("autosave.xlsx");
+        app.run("file.save", serde_json::json!({"path": path.to_string_lossy()})).unwrap();
+        let saved_once = std::fs::read(&path).unwrap();
         app.run("cell.set", serde_json::json!({"cell": "A1", "input": "42"})).unwrap();
-        app.ui.autosave = true;
-        app.session.active_mut().unwrap().path = Some(path.to_string_lossy().into_owned());
-        app.grid.last_autosave = monotonic_ms() - 3000.0;
 
         let _ = ctx.run_logic(&egui::RawInput::default(), |ctx| app.logic(ctx));
-        assert!(path.exists(), "a hidden logic-only tick saves a dirty workbook with a file");
+        assert_ne!(std::fs::read(&path).unwrap(), saved_once, "a hidden logic-only tick saves a dirty workbook with a file");
         assert!(!app.session.active().unwrap().is_dirty(), "the save clears the dirty state");
-        let saved_at = app.grid.last_autosave;
+        let written = std::fs::metadata(&path).unwrap().modified().unwrap();
         let _ = ctx.run_logic(&egui::RawInput::default(), |ctx| app.logic(ctx));
-        assert_eq!(app.grid.last_autosave, saved_at, "the same change is not saved a second time");
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), written, "the same change is not saved a second time");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

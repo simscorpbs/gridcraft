@@ -1022,6 +1022,46 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "AutoSave: save after every change (workbooks saved to a file)" => {
             "Salvamento automático: salvar após cada alteração (pastas de trabalho salvas em um arquivo)"
         }
+        "AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy." => {
+            "O Salvamento Automático não está disponível no navegador: ele não pode gravar nos seus arquivos. Salvar baixa uma cópia."
+        }
+        "Save the workbook to turn on AutoSave" => "Salve a pasta de trabalho para ativar o Salvamento Automático",
+        "AutoSave only keeps .xlsx, .xlsm, .xltx and .xltm workbooks; {name} can't keep everything. Save as .xlsx to turn on AutoSave." => {
+            "O Salvamento Automático só mantém pastas de trabalho .xlsx, .xlsm, .xltx e .xltm; {name} não consegue manter tudo. Salve como .xlsx para ativar o Salvamento Automático."
+        }
+        "Save the workbook to turn on AutoSave (GridCraft couldn't check this file on disk)" => {
+            "Salve a pasta de trabalho para ativar o Salvamento Automático (o GridCraft não conseguiu verificar este arquivo no disco)"
+        }
+        "AutoSave is paused: this file was changed on another device. Click to choose which version to keep." => {
+            "O Salvamento Automático está em pausa: este arquivo foi alterado em outro dispositivo. Clique para escolher qual versão manter."
+        }
+        "AutoSave is paused: this file was moved or deleted elsewhere. Click to choose what to do." => {
+            "O Salvamento Automático está em pausa: este arquivo foi movido ou excluído em outro lugar. Clique para escolher o que fazer."
+        }
+        "AutoSave is off for this workbook. Click to turn it on." => {
+            "O Salvamento Automático está desativado para esta pasta de trabalho. Clique para ativá-lo."
+        }
+        "AutoSave couldn't write the file: {error}. It will try again shortly." => {
+            "O Salvamento Automático não conseguiu gravar o arquivo: {error}. Ele tentará novamente em instantes."
+        }
+        "Turn on AutoSave by default" => "Ativar o Salvamento Automático por padrão",
+        "AutoSave keeps .xlsx, .xlsm and .xltx workbooks saved as you work, on this computer or in iCloud Drive, Google Drive or OneDrive. The title-bar switch sets it for one file." => {
+            "O Salvamento Automático mantém salvas as pastas de trabalho .xlsx, .xlsm e .xltx enquanto você trabalha, neste computador ou no iCloud Drive, Google Drive ou OneDrive. A chave da barra de título o define para um arquivo."
+        }
+        "Save Conflict" => "Conflito ao Salvar",
+        "Save to Cloud" => "Salvar na Nuvem",
+        "{name} was moved or deleted elsewhere" => "{name} foi movido ou excluído em outro lugar",
+        "{name} was changed on another device" => "{name} foi alterado em outro dispositivo",
+        "AutoSave stopped so that neither version is lost." => "O Salvamento Automático parou para que nenhuma das versões seja perdida.",
+        "Keep both saves this version as a copy beside the other." => "Manter ambos salva esta versão como uma cópia ao lado da outra.",
+        "Keep both" => "Manter ambos",
+        "Keep this version" => "Manter esta versão",
+        "Open the other version" => "Abrir a outra versão",
+        "Decide later" => "Decidir depois",
+        "Save it here again" => "Salvar aqui de novo",
+        "Where should AutoSave keep this workbook?" => "Onde o Salvamento Automático deve manter esta pasta de trabalho?",
+        "File name:" => "Nome do arquivo:",
+        "Other location…" => "Outro local…",
         "All sheets" => "Todas as planilhas",
         "Record Macro" => "Gravar Macro",
         "Stop Recording" => "Parar Gravação",

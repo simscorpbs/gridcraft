@@ -35,18 +35,30 @@ impl SheetApp {
     /// Asks about the next unsaved workbook before quitting, in its window, or closes the app
     /// once none is left.
     pub(crate) fn continue_quit(&mut self, ctx: &egui::Context) {
-        let dirty = self.session.documents().iter().find(|d| d.is_dirty()).map(|d| d.uid);
-        match dirty.and_then(|uid| self.session.doc_window(uid)) {
-            Some(window) => {
-                // Its window comes forward (the native window too: see `doc_windows`).
-                self.enter_window(window);
-                let title = self.session.active().map(|d| d.display_title()).unwrap_or_default();
-                self.open_dialog("saveChanges", json!({"title": title, "quit": true}));
-                self.bring_forward = true;
-            }
-            None => {
+        loop {
+            let dirty = self.session.documents().iter().find(|d| d.is_dirty()).map(|d| d.uid);
+            let Some((uid, window)) = dirty.and_then(|uid| Some((uid, self.session.doc_window(uid)?))) else {
                 self.allow_close = true;
                 ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Close);
+                return;
+            };
+            // Its window comes forward (the native window too: see `doc_windows`).
+            self.enter_window(window);
+            // With AutoSave on, its changes are written and there is nothing to ask; a file changed
+            // elsewhere stops the quit and asks what to keep.
+            match self.session.autosave_before_discard(uid) {
+                gridcraft_engine::cmd::cloud::Flush::Saved => continue,
+                gridcraft_engine::cmd::cloud::Flush::Conflict(_) => {
+                    self.after_engine();
+                    self.bring_forward = true;
+                    return;
+                }
+                gridcraft_engine::cmd::cloud::Flush::Ask => {
+                    let title = self.session.active().map(|d| d.display_title()).unwrap_or_default();
+                    self.open_dialog("saveChanges", json!({"title": title, "quit": true}));
+                    self.bring_forward = true;
+                    return;
+                }
             }
         }
     }

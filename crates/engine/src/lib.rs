@@ -6,6 +6,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+pub mod autosave;
 pub mod catalog;
 pub mod cf;
 mod chart_svg;
@@ -224,6 +225,16 @@ pub struct DocState {
     /// The references `edit.goTo` with `record: true` went to in this document, newest first,
     /// without names, each area written with its sheet (`Sheet1!B14:C22,Sheet1!F19:G30`).
     pub go_to_recent: Vec<String>,
+    /// The AutoSave switch for this workbook ([`autosave`]): on by default for a workbook whose
+    /// file keeps everything, as File › Options › Save says, and remembered for the file.
+    pub autosave: bool,
+    /// The workbook's file as GridCraft last read or wrote it, which AutoSave checks so it never
+    /// overwrites what another device or program saved meanwhile. `None` for a workbook with no
+    /// file of its own (new, or opened from bytes).
+    pub stamp: Option<gridcraft_cloud::DiskStamp>,
+    /// A conflict AutoSave found and nobody has resolved yet: the file `changed` or went
+    /// `missing`. AutoSave does not write while one waits.
+    pub conflict: Option<gridcraft_cloud::DiskState>,
 }
 
 static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -330,6 +341,9 @@ impl DocState {
             touched: None,
             edits: None,
             go_to_recent: vec![],
+            autosave: true,
+            stamp: None,
+            conflict: None,
         }
     }
     pub fn is_dirty(&self) -> bool {
@@ -398,6 +412,9 @@ pub struct Prefs {
     /// (at most [`recent::MAX`]; see [`recent`]). An application list, as in Excel.
     #[serde(deserialize_with = "recent::lenient")]
     pub recent_functions: Vec<String>,
+    /// File ▸ Options ▸ Save ▸ Turn on AutoSave by default: whether AutoSave is on for files with
+    /// no choice of their own ([`autosave`]). On by default.
+    pub autosave_by_default: bool,
 }
 
 /// The selection statistics shown on the status bar, set with `view.statusBar`. Excel turns on
@@ -433,6 +450,7 @@ impl Default for Prefs {
             formula_bar: true,
             status_bar: StatusBarStats::default(),
             recent_functions: recent::defaults(),
+            autosave_by_default: true,
         }
     }
 }
@@ -531,6 +549,16 @@ pub struct Session {
     /// Measures cell text for AutoFit Column Width. Without it (CLI, MCP) AutoFit uses
     /// [`cmd::format::approx_text_width`].
     pub text_width: Option<TextWidth>,
+    /// The AutoSave switches the user left on files ([`autosave`]).
+    pub autosave_memory: autosave::AutoSaveMemory,
+    /// The iCloud Drive, Google Drive and OneDrive folders on this computer, once the host has
+    /// looked ([`gridcraft_cloud::discover`]); headless sessions and tests know none, so a script
+    /// never writes into someone's cloud by accident.
+    pub cloud_roots: Vec<gridcraft_cloud::CloudRoot>,
+    /// Whether the host runs AutoSave (the interface does, with its clock). Only then does closing
+    /// a changed workbook write it first ([`Session::autosave_before_discard`]); headless sessions
+    /// (CLI, MCP, scripts) keep refusing to close a changed workbook until it is saved.
+    pub autosave_host: bool,
 }
 
 impl Session {
@@ -582,7 +610,8 @@ impl Session {
         cmd::locked_cell_error(sh, at, &d.unlocked_ranges)
     }
     /// Opens a workbook in a new window, which becomes the active one.
-    pub fn add_document(&mut self, d: DocState) -> usize {
+    pub fn add_document(&mut self, mut d: DocState) -> usize {
+        d.autosave = self.autosave_for(d.path.as_deref());
         let uid = d.uid;
         self.docs.push(d);
         let w = self.push_window(uid);

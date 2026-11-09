@@ -1,4 +1,5 @@
 use super::about::about;
+use super::autosave::{save_conflict, save_to_cloud};
 use super::analysis::{analysis_toolpak, cancel_solver_options, goal_seek, in_solver_options, solver, solver_results};
 use super::charts::{recommended_charts, select_data};
 use super::command_search::command_search;
@@ -227,6 +228,8 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     ui.label(format!("{} engine commands are available. See docs/mcp.md and docs/control-protocol.md.", gridcraft_engine::command_specs().len()));
                 }
                 "about" => about(ui, &mut d),
+                "saveConflict" => save_conflict(app, ui, &mut d, &mut open),
+                "saveToCloud" => save_to_cloud(app, ui, &mut d, &mut open),
                 "journal" => {
                     egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
                         for (id, p) in app.session.journal.iter().rev().take(500) {
