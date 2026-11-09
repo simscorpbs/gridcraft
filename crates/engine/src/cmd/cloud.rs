@@ -146,7 +146,7 @@ fn resolve_conflict(s: &mut Session, p: &Json) -> Result<Json> {
             let copy = gridcraft_cloud::conflict_copy_path(Path::new(&path), "conflict copy")
                 .ok_or_else(|| EngineError::Other(format!("Too many conflict copies of {path}")))?;
             // The session now edits the copy; the other version is left as it is.
-            let r = save(s, &copy.to_string_lossy())?;
+            let r = super::file::save_with(s, &json!({"path": copy.to_string_lossy()}), true)?;
             set_conflict(s, uid, None);
             Ok(r)
         }
@@ -219,7 +219,7 @@ impl Session {
         }
         let flush = match d.conflict {
             Some(conflict) if d.autosave_block().is_some_and(|b| matches!(b, crate::autosave::AutoSaveBlock::Conflict { .. })) => Flush::Conflict(conflict),
-            _ => match self.autosave_write(uid) {
+            _ => match self.autosave_write_for(uid, Some("close")) {
                 Ok(AutoSaveWrite::Saved) => Flush::Saved,
                 Ok(AutoSaveWrite::Conflict(conflict)) => Flush::Conflict(conflict),
                 Ok(AutoSaveWrite::NotCovered) | Err(_) => Flush::Ask,

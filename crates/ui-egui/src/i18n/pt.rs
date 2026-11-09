@@ -1048,6 +1048,30 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "AutoSave keeps .xlsx, .xlsm and .xltx workbooks saved as you work, on this computer or in iCloud Drive, Google Drive or OneDrive. The title-bar switch sets it for one file." => {
             "O Salvamento Automático mantém salvas as pastas de trabalho .xlsx, .xlsm e .xltx enquanto você trabalha, neste computador ou no iCloud Drive, Google Drive ou OneDrive. A chave da barra de título o define para um arquivo."
         }
+        "Version History" => "Histórico de Versões",
+        "Version history folder:" => "Pasta do histórico de versões:",
+        "Not set: the settings folder" => "Não definida: a pasta de configurações",
+        "Apply" => "Aplicar",
+        "Use the settings folder" => "Usar a pasta de configurações",
+        "History already kept:" => "Histórico já existente:",
+        "Copy it there" => "Copiá-lo para lá",
+        "Move it there" => "Movê-lo para lá",
+        "Leave it where it is" => "Deixá-lo onde está",
+        "Mirror folder: also keep the history in the settings folder" => "Pasta espelho: manter também o histórico na pasta de configurações",
+        "Copying the version history to the new folder…" => "Copiando o histórico de versões para a nova pasta…",
+        "Not reachable now; brought up to date when it is back:" => "Inacessível no momento; será atualizada quando voltar:",
+        "A history folder inside iCloud Drive, OneDrive or Google Drive is as private as that account: anyone with access to it can open your earlier versions." => {
+            "Uma pasta de histórico dentro do iCloud Drive, OneDrive ou Google Drive é tão privada quanto essa conta: quem tiver acesso a ela pode abrir suas versões anteriores."
+        }
+        "Device name in the history:" => "Nome do dispositivo no histórico:",
+        "Delete this document's history…" => "Excluir o histórico deste documento…",
+        "Delete all version history…" => "Excluir todo o histórico…",
+        "Delete every document's version history, in every history folder? This cannot be undone." => {
+            "Excluir o histórico de versões de todos os documentos, em todas as pastas de histórico? Esta ação não pode ser desfeita."
+        }
+        "Delete this document's version history, in every history folder? This cannot be undone." => {
+            "Excluir o histórico de versões deste documento, em todas as pastas de histórico? Esta ação não pode ser desfeita."
+        }
         "Save Conflict" => "Conflito ao Salvar",
         "Save to Cloud" => "Salvar na Nuvem",
         "{name} was moved or deleted elsewhere" => "{name} foi movido ou excluído em outro lugar",

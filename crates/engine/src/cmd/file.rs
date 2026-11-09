@@ -3,13 +3,13 @@
 use serde_json::{Value as Json, json};
 
 use super::{CommandSpec, Result, Session, always, bad, bool_param, cmd, edit, has_doc, ok, str_param, target_sheet, u32_param};
-use crate::DocState;
+use crate::{DocState, EngineError};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(noundo "file.new", "New Workbook", ["File"], Some("Cmd+N"), "{sample?: \"budget\"|\"sales\"|\"grades\"}", always, new_workbook),
         cmd!(noundo "file.open", "Open…", ["File"], Some("Cmd+O"), "{path} | {name, base64}, plus {password} for a password-protected workbook and {csvAsText?: bool} to keep every csv/tsv/txt field as text, with no number or date conversion (xlsx, xlsm, xls import, xlsb and ods data import, csv, tsv, txt, json)", always, open),
-        cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?, ifUnchanged?: bool} (xlsx by default; .csv/.tsv/.json/.html/.pdf by extension; AutoSave sends `ifUnchanged`: the workbook's own file is written only if no other device or program changed it since it was read or written here, else nothing is written and the result has `conflict` (changed or missing), see file.resolveConflict) → {saved, path, bytes}", has_doc, save),
+        cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?, ifUnchanged?: bool, trigger?: string} (xlsx by default; .csv/.tsv/.json/.html/.pdf by extension; AutoSave sends `ifUnchanged`: the workbook's own file is written only if no other device or program changed it since it was read or written here, else nothing is written and the result has `conflict` (changed or missing), see file.resolveConflict; `trigger` says what asked for the save, recorded in the version history, e.g. `close`) → {saved, path, bytes}. In the desktop app the workbook's own file also gets a version in its history (file.versions)", has_doc, save),
         cmd!(noundo "file.saveAs", "Save As…", ["File"], Some("Cmd+Shift+S"), "{path} (.xlsx, .csv, .tsv, .json, .html, or .pdf: a PDF of the active sheet)", has_doc, save_as),
         cmd!(query "file.saveBytes", "Encode Workbook", [], None, "{format?: xlsx|csv|tsv|json|html} → {base64}", has_doc, save_bytes),
         cmd!(noundo "file.close", "Close", ["File"], Some("Cmd+W"), "{force?: bool, document?: bool} (closes the active window, or with `document` the workbook and all its windows; the workbook closes with its last window)", has_doc, close),
@@ -21,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Options",
             ["File"],
             None,
-            "{autosaveByDefault?: bool} → {calculation: {mode, iterative, maxIterations, maxChange, precisionAsDisplayed}, autosaveByDefault?} for the active workbook (the interface opens File › Options; with `autosaveByDefault` it only sets whether AutoSave is on for files with no choice of their own; change other settings with their own commands, e.g. formulas.calculationOptions, view.theme, app.language.set)",
+            "{autosaveByDefault?: bool, versionsFolder?: string, versionsMirror?: bool, versionsExisting?: \"copy\"|\"move\"|\"leave\", deviceLabel?: string} → {calculation: {mode, iterative, maxIterations, maxChange, precisionAsDisplayed}, autosaveByDefault, versionsFolder, versionsMirror, versionsFolders, versionsUnavailable, versionsRelocating, deviceLabel, deviceLabelDefault} for the active workbook (the interface opens File › Options; with `autosaveByDefault` it only sets whether AutoSave is on for files with no choice of their own; `versionsFolder` (an existing folder, or `default` for the settings folder alone) keeps the version history there instead, `versionsMirror` also keeps it in the settings folder, `versionsExisting` says whether the history already kept is copied (default), moved or left when the folders change, and `deviceLabel` (or `auto`) is the device name versions record; change other settings with their own commands, e.g. formulas.calculationOptions, view.theme, app.language.set)",
             always,
             options
         ),
@@ -88,6 +88,11 @@ pub(super) fn open(s: &mut Session, p: &Json) -> Result<Json> {
     // Someone else may have made the file: its active content asks before it runs.
     let stamp = path.as_deref().and_then(|p| gridcraft_cloud::DiskStamp::of_bytes(std::path::Path::new(p), &bytes).ok());
     let mut doc = DocState::new(wb, path, title, crate::Trust::FromFile);
+    // The id the file carries, if it was saved here before: its history is kept under it.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        doc.history = crate::versions::DocHistory::opened(&bytes);
+    }
     // What AutoSave checks before it writes this file: that it still holds what was just read.
     doc.stamp = stamp;
     if crate::io::FileKind::from_path(&name).is_none() && gridcraft_xlsx::sniff(&bytes) == gridcraft_xlsx::Format::Xlsx {
@@ -110,6 +115,12 @@ pub(super) fn open(s: &mut Session, p: &Json) -> Result<Json> {
 }
 
 pub(super) fn save(s: &mut Session, p: &Json) -> Result<Json> {
+    save_with(s, p, false)
+}
+
+/// [`save`]; with `conflict_copy` the file is the copy Keep both makes after a save conflict,
+/// which the version history records as such.
+pub(super) fn save_with(s: &mut Session, p: &Json, conflict_copy: bool) -> Result<Json> {
     let path = match str_param(p, "path").map(str::to_string).or_else(|| s.active().and_then(|d| d.path.clone())) {
         Some(p) => p,
         None => {
@@ -117,6 +128,12 @@ pub(super) fn save(s: &mut Session, p: &Json) -> Result<Json> {
             return ok();
         }
     };
+    // What asked for the save, recorded in the version history: a short word such as `close`.
+    match p.get("trigger") {
+        None | Some(Json::Null) => {}
+        Some(Json::String(t)) if !t.is_empty() && t.len() <= 32 && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') => {}
+        Some(_) => return Err(bad("file.save", "`trigger` is a short word such as close")),
+    }
     // A PDF is a print of the sheet (Page Setup applies), not a copy of the workbook: the
     // document keeps its file and its unsaved changes.
     if std::path::Path::new(&path).extension().and_then(std::ffi::OsStr::to_str).is_some_and(|e| e.eq_ignore_ascii_case("pdf")) {
@@ -124,25 +141,47 @@ pub(super) fn save(s: &mut Session, p: &Json) -> Result<Json> {
     }
     // AutoSave (`ifUnchanged`) never overwrites a file another device or program changed since it
     // was read or written here: it reports the conflict for `file.resolveConflict` instead.
-    if bool_param(p, "ifUnchanged") == Some(true)
-        && let Some(conflict) = super::cloud::conflict_before_save(s, &path)?
-    {
+    let autosave_save = bool_param(p, "ifUnchanged") == Some(true);
+    if autosave_save && let Some(conflict) = super::cloud::conflict_before_save(s, &path)? {
         return Ok(json!({"saved": false, "conflict": conflict.id(), "path": path}));
     }
     let d = s.doc_mut()?;
-    let (old_path, autosave) = (d.path.clone(), d.autosave);
+    let (old_path, autosave, uid) = (d.path.clone(), d.autosave, d.uid);
     // The document's own file keeps the format its content had when opened; any other path
     // goes by its extension. Relative paths to linked workbooks are rewritten for the new folder.
     let kind = crate::io::FileKind::from_path(&path).or(d.content_kind.filter(|_| d.path.as_deref() == Some(path.as_str())));
     let rebased = crate::io::source_dir(&path).and_then(|f| gridcraft_xlsx::rebase_links(&d.wb, &f));
     let wb = rebased.as_ref().unwrap_or(&d.wb);
-    let bytes = match kind {
+    #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
+    let mut bytes = match kind {
         Some(kind) => crate::io::save_bytes_as(wb, &path, kind)?,
         None => crate::io::save_bytes(wb, &path)?,
     };
-    crate::io::write_file(&path, &bytes)?;
     // Only a full-fidelity format clears the dirty flag and becomes the document's file.
-    if matches!(kind, Some(crate::io::FileKind::Xlsx | crate::io::FileKind::Json)) {
+    let own = matches!(kind, Some(crate::io::FileKind::Xlsx | crate::io::FileKind::Json));
+    // The version history: settle the file's identity and keep what is on disk before it is
+    // replaced. It can't fail the save.
+    #[cfg(not(target_arch = "wasm32"))]
+    let history = if own && s.has_versions() {
+        let request = crate::versions::SaveRequest { autosave: autosave_save, trigger: str_param(p, "trigger"), conflict_copy };
+        let pending = s.prepare_version(uid, std::path::Path::new(&path), request);
+        if crate::versions::is_package(std::path::Path::new(&path)) {
+            let id = pending.as_ref().and_then(|p| p.document_id.as_deref());
+            bytes = match id {
+                Some(id) => crate::versions::with_document_id(bytes, Some(id)),
+                None => crate::versions::without_document_id(bytes),
+            };
+        }
+        Some((request, pending))
+    } else {
+        None
+    };
+    #[cfg(target_arch = "wasm32")]
+    let _ = (uid, conflict_copy);
+    crate::io::write_file(&path, &bytes)?;
+    let len = bytes.len();
+    let d = s.doc_mut()?;
+    if own {
         // The new file is the workbook's own now, so `CELL("filename")` reports it (#1489). Set
         // before the `saved` snapshot, or the workbook would read as dirty the moment it was
         // saved; and only when it changes, so an ordinary Save does not clone the workbook.
@@ -159,8 +198,12 @@ pub(super) fn save(s: &mut Session, p: &Json) -> Result<Json> {
         if old_path.as_deref() != Some(path.as_str()) {
             s.autosave_follows(&path, autosave);
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some((request, pending)) = history {
+            s.record_saved(uid, std::path::Path::new(&path), bytes, request, pending);
+        }
     }
-    Ok(json!({"saved": true, "path": path, "bytes": bytes.len()}))
+    Ok(json!({"saved": true, "path": path, "bytes": len}))
 }
 
 fn save_as(s: &mut Session, p: &Json) -> Result<Json> {
@@ -248,10 +291,13 @@ fn properties(s: &mut Session, p: &Json) -> Result<Json> {
 /// File › Options: reports the workbook-level settings and asks the interface to show its Options
 /// page. Nothing changes here; every setting has its own command.
 fn options(s: &mut Session, p: &Json) -> Result<Json> {
-    // File > Options > Save > Turn on AutoSave by default is the one setting kept here: it is
-    // application-wide, and the workbooks follow it unless their file has a choice of its own.
-    if let Some(on) = bool_param(p, "autosaveByDefault") {
-        s.set_autosave_by_default(on);
+    // File > Options > Save > Turn on AutoSave by default is application-wide, and the workbooks
+    // follow it unless their file has a choice of its own. The version history folders and the
+    // device name are application settings too.
+    let history = HistoryOptions::read(p)?;
+    let setting = history.any();
+    if setting {
+        history.apply(s)?;
     } else {
         s.ui_requests.push(crate::UiRequest::Dialog("options".into(), json!({})));
     }
@@ -265,10 +311,138 @@ fn options(s: &mut Session, p: &Json) -> Result<Json> {
         json!({"mode": mode, "iterative": c.iterative, "maxIterations": c.max_iterations, "maxChange": c.max_change, "precisionAsDisplayed": c.precision_as_displayed})
     });
     let mut r = json!({"calculation": calculation});
-    if bool_param(p, "autosaveByDefault").is_some() {
+    // Setting an application option reports the options it belongs to.
+    if setting {
         r["autosaveByDefault"] = json!(s.prefs.autosave_by_default);
+        HistoryOptions::report(s, &mut r);
     }
     Ok(r)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+use crate::versions::{MAX_DEVICE_LABEL_CHARS, Relocation};
+
+/// The browser keeps no history, so nothing is relocated.
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy)]
+enum Relocation {
+    Copy,
+    Move,
+    Leave,
+}
+
+/// Longest device label, in characters.
+#[cfg(target_arch = "wasm32")]
+const MAX_DEVICE_LABEL_CHARS: usize = 64;
+
+/// The AutoSave default and the version history settings `file.options` reads from its parameters.
+struct HistoryOptions {
+    autosave_by_default: Option<bool>,
+    /// `Some(None)`: back to the settings folder alone.
+    versions_folder: Option<Option<String>>,
+    versions_mirror: Option<bool>,
+    existing: Relocation,
+    /// `Some(None)`: the system's name.
+    device_label: Option<Option<String>>,
+}
+
+impl HistoryOptions {
+    fn read(p: &Json) -> Result<Self> {
+        let versions_folder = match p.get("versionsFolder") {
+            None | Some(Json::Null) => None,
+            Some(Json::String(f)) if f.trim().is_empty() || f.trim().eq_ignore_ascii_case("default") => Some(None),
+            Some(Json::String(f)) => Some(Some(folder_param(f)?)),
+            Some(_) => return Err(bad("file.options", "`versionsFolder` must be a folder path, or default")),
+        };
+        let existing = match str_param(p, "versionsExisting") {
+            None | Some("copy") => Relocation::Copy,
+            Some("move") => Relocation::Move,
+            Some("leave") => Relocation::Leave,
+            Some(other) => return Err(bad("file.options", format!("`versionsExisting` is copy, move or leave, not `{other}`"))),
+        };
+        let device_label = match p.get("deviceLabel") {
+            None | Some(Json::Null) => None,
+            Some(Json::String(l)) if l.trim().is_empty() || l.trim().eq_ignore_ascii_case("auto") => Some(None),
+            Some(Json::String(l)) => Some(Some(l.trim().chars().filter(|c| !c.is_control()).take(MAX_DEVICE_LABEL_CHARS).collect::<String>())),
+            Some(_) => return Err(bad("file.options", "`deviceLabel` must be a string, or auto")),
+        };
+        Ok(Self {
+            autosave_by_default: bool_param(p, "autosaveByDefault"),
+            versions_folder,
+            versions_mirror: bool_param(p, "versionsMirror"),
+            existing,
+            device_label,
+        })
+    }
+
+    fn any(&self) -> bool {
+        self.autosave_by_default.is_some() || self.versions_folder.is_some() || self.versions_mirror.is_some() || self.device_label.is_some()
+    }
+
+    fn apply(self, s: &mut Session) -> Result<()> {
+        if let Some(on) = self.autosave_by_default {
+            s.set_autosave_by_default(on);
+        }
+        if let Some(label) = self.device_label {
+            s.prefs.device_label = label;
+        }
+        if self.versions_folder.is_some() || self.versions_mirror.is_some() {
+            if let Some(folder) = self.versions_folder {
+                s.prefs.versions_folder = folder;
+            }
+            if let Some(mirror) = self.versions_mirror {
+                s.prefs.versions_mirror = mirror;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            s.apply_version_folders(self.existing).map_err(EngineError::Other)?;
+            #[cfg(target_arch = "wasm32")]
+            let _ = self.existing;
+        }
+        Ok(())
+    }
+
+    /// The history settings in `file.options`' result.
+    fn report(s: &Session, r: &mut Json) {
+        let pr = &s.prefs;
+        #[cfg(not(target_arch = "wasm32"))]
+        let (folders, unavailable, relocating) = s.version_folders();
+        #[cfg(target_arch = "wasm32")]
+        let (folders, unavailable, relocating): (Vec<std::path::PathBuf>, Vec<std::path::PathBuf>, bool) = (Vec::new(), Vec::new(), false);
+        #[cfg(not(target_arch = "wasm32"))]
+        let device_default = crate::versions::default_device_label();
+        #[cfg(target_arch = "wasm32")]
+        let device_default = "Browser";
+        if let Some(o) = r.as_object_mut() {
+            o.insert("versionsFolder".into(), json!(pr.versions_folder));
+            o.insert("versionsMirror".into(), json!(pr.versions_mirror));
+            o.insert("versionsFolders".into(), json!(folders));
+            o.insert("versionsUnavailable".into(), json!(unavailable));
+            o.insert("versionsRelocating".into(), json!(relocating));
+            o.insert("deviceLabel".into(), json!(pr.device_label));
+            o.insert("deviceLabelDefault".into(), json!(device_default));
+        }
+    }
+}
+
+/// A history folder setting: an existing folder, given as an absolute path or one starting with
+/// `~/`.
+fn folder_param(f: &str) -> Result<String> {
+    let f = f.trim();
+    if f.chars().count() > 1024 || f.chars().any(char::is_control) {
+        return Err(bad("file.options", "`versionsFolder` isn't a folder path"));
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).filter(|h| !h.is_empty()).map(std::path::PathBuf::from);
+    let path = match (f.strip_prefix("~/"), home) {
+        (Some(rest), Some(h)) => h.join(rest),
+        _ => std::path::PathBuf::from(f),
+    };
+    if !path.is_absolute() {
+        return Err(bad("file.options", format!("`versionsFolder`: {f:?} isn't a full path")));
+    }
+    if !path.is_dir() {
+        return Err(EngineError::Other(format!("no folder at {}", path.display())));
+    }
+    Ok(path.to_string_lossy().into_owned())
 }
 
 fn activate_window(s: &mut Session, p: &Json) -> Result<Json> {

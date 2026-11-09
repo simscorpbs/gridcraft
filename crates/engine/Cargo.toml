@@ -26,6 +26,14 @@ gridcraft-pdf = { workspace = true }
 gridcraft-math = { workspace = true }
 gridcraft-cloud = { workspace = true }
 image = { workspace = true }
+chrono = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The version history keeps a workbook (a zip package) as its parts, hashed, with compressed deltas.
+sha2 = { workspace = true }
+zip = { workspace = true }
+getrandom = { workspace = true }
+miniz_oxide = { workspace = true }
 
 [dev-dependencies]
 gridcraft-xlsx = { workspace = true, features = ["test-support"] }
