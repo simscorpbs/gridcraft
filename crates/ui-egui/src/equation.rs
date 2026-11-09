@@ -139,14 +139,14 @@ pub fn editor(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &m
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
         for (label, snippet, tip) in QUICK {
-            let b = ui.add(egui::Button::new(*label).min_size(vec2(30.0, 22.0))).on_hover_text(*tip);
+            let b = ui.add(egui::Button::new(*label).min_size(vec2(30.0, 22.0))).on_hover_text(crate::i18n::tr(ui, tip));
             if b.clicked() {
                 insert_snippet(ui.ctx(), edit_id, &mut text, snippet);
             }
         }
     });
     ui.add_space(6.0);
-    ui.label("LaTeX:");
+    ui.label(crate::i18n::tr(ui, "LaTeX:"));
     let pv = preview(ui.ctx(), ui.scope_id().with("equation-preview"), &text);
     let mark = pv.result.as_ref().err().and_then(|e| e.span.clone()).or_else(|| pv.result.as_ref().err().map(|_| text.len()..text.len()));
     let mark = mark.filter(|_| !text.trim().is_empty());
@@ -171,7 +171,7 @@ pub fn editor(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &m
             ui.colored_label(t.danger, msg);
         }
         _ => {
-            ui.label(egui::RichText::new("Preview").color(t.text_dim));
+            ui.label(egui::RichText::new(crate::i18n::tr(ui, "Preview")).color(t.text_dim));
         }
     }
     // The preview card is the sheet's colour, with the sheet's ink, in both themes.
@@ -198,7 +198,7 @@ pub fn editor(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &m
         if ok.clicked() || (valid && cmd_enter) {
             *confirm = true;
         }
-        if ui.add(egui::Button::new("Cancel").min_size(vec2(64.0, 0.0))).clicked() {
+        if ui.add(egui::Button::new(crate::i18n::tr(ui, "Cancel")).min_size(vec2(64.0, 0.0))).clicked() {
             *open = false;
         }
         let verb = if d.command == Some("equation.edit") { "apply" } else { "insert" };

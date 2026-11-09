@@ -36,10 +36,10 @@ pub(super) fn insert_function(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dia
         let label = ui.label(language.tr("Or select a category:"));
         craft_ui::ComboBox::from_id_salt("insertFunctionCategory")
             .width(220.0)
-            .selected_text(language.tr(&category))
+            .selected_text(if category == ALL { language.tr("Function category|All") } else { language.tr(&category) })
             .show_ui(ui, |ui| {
                 for c in [MOST_RECENTLY_USED, ALL].into_iter().chain(lib::CATEGORIES.iter().map(|(_, l)| *l)) {
-                    ui.selectable_value(&mut category, c.to_string(), language.tr(c));
+                    ui.selectable_value(&mut category, c.to_string(), if c == ALL { language.tr("Function category|All") } else { language.tr(c) });
                 }
             })
             .response

@@ -256,7 +256,11 @@ fn active_input(app: &SheetApp) -> String {
     let Some(sh) = d.wb.active() else { return String::new() };
     let a = sh.merge_at(d.selection.active).map(|m| m.start).unwrap_or(d.selection.active);
     if let Some(picture) = sh.cell_pictures.get(&a) {
-        return if picture.alt.is_empty() { "Picture in cell".into() } else { format!("Picture: {}", picture.alt) };
+        return if picture.alt.is_empty() {
+            app.ui.language.tr("Picture in cell").to_owned()
+        } else {
+            app.ui.language.fmt("Picture: {alt}", &[("alt", picture.alt.as_str())])
+        };
     }
     // Python code is shown as it is: it isn't a formula to translate or a value to format. Like
     // a formula, it stays out of view in a Hidden cell on a protected sheet.
