@@ -102,9 +102,6 @@ pub struct UiState {
     /// Tint the active cell's whole row (File ▸ Options ▸ General), on every sheet and workbook, so
     /// the eye keeps its place across a wide table. A preference: nothing goes into the file.
     pub highlight_active_row: bool,
-    /// AutoSave (the title-bar switch): save saved-to-file .xlsx workbooks shortly after every
-    /// change. A preference like the rest of this struct — it stays on across restarts (#1901).
-    pub autosave: bool,
     /// The interface accent colour (File ▸ Options ▸ General); Excel green by default. A saved
     /// value that is not a six-digit hexadecimal colour reads as the default.
     pub accent_color: theme::AccentColor,
@@ -162,7 +159,6 @@ impl Default for UiState {
             animations: true,
             autocomplete: true,
             highlight_active_row: false,
-            autosave: false,
             accent_color: theme::AccentColor::DEFAULT,
             show_discord: false,
             show_account_picture: !cfg!(target_os = "macos"),
@@ -243,6 +239,11 @@ pub struct SheetApp {
     pub backstage: Option<backstage::Backstage>,
     pub message: Option<(String, String)>,
     pub toast: Option<(String, f64)>,
+    /// AutoSave's clock and the failures it is waiting out (see [`app::autosave`]).
+    pub autosaver: gridcraft_engine::autosave::Scheduler,
+    /// Workbooks whose save conflict the person was already asked about, so a "Decide later" is
+    /// not asked again at once.
+    pub(crate) conflict_asked: std::collections::HashSet<u64>,
     /// Dismissible info bar under the ribbon (open-time notices).
     pub notice: Option<Notice>,
     pub services: Services,
@@ -334,6 +335,9 @@ pub struct SheetApp {
     /// The update check, the startup prompt and a running self-update (desktop only).
     #[cfg(not(target_arch = "wasm32"))]
     updates_rt: updates_ui::Runtime,
+    /// The cloud folders being looked for in the background ([`SheetApp::discover_cloud`]).
+    #[cfg(not(target_arch = "wasm32"))]
+    cloud_discovery: Option<std::sync::mpsc::Receiver<Vec<gridcraft_cloud::CloudRoot>>>,
 }
 
 /// Strips the engine's error prefixes for message boxes.

@@ -17,7 +17,9 @@ impl SheetApp {
     pub fn after_open(&mut self, path: Option<&str>, r: &Json) {
         self.backstage = None;
         if let Some(path) = path {
-            self.ui.recent.retain(|p| p != path);
+            // Each file once, however it is spelled (`C:\Docs\A.xlsx` and `c:/docs/a.xlsx` on Windows).
+            let key = gridcraft_engine::autosave::path_text_key(path);
+            self.ui.recent.retain(|p| gridcraft_engine::autosave::path_text_key(p) != key);
             self.ui.recent.insert(0, path.to_string());
             self.ui.recent.truncate(20);
         }
@@ -99,33 +101,5 @@ impl SheetApp {
             }
             self.after_engine();
         }
-    }
-
-    /// AutoSave: save workbooks that have a file shortly after they change. This decision lives in
-    /// `logic` so a hidden or logic-only frame still saves; the monotonic timestamp check keeps a
-    /// forced hidden UI pass from saving the same change twice.
-    pub(super) fn autosave(&mut self, ctx: &egui::Context) {
-        let dirty_xlsx = self.session.active().is_some_and(|d| d.is_dirty() && d.path.as_deref().is_some_and(|p| p.ends_with(".xlsx")));
-        let now = crate::monotonic_ms();
-        let autosave_due =
-            self.ui.autosave && self.editor.is_none() && self.text_box_editor.is_none() && now - self.grid.last_autosave > 2000.0 && dirty_xlsx;
-        if autosave_due {
-            self.grid.last_autosave = now;
-            self.store_view_state();
-            // A failed AutoSave (file locked, disk full) is shown, not dropped: the workbook stays
-            // dirty and the next tick tries again.
-            if let Err(e) = self.session.run("file.save", json!({})) {
-                self.toast = Some((format!("AutoSave failed: {}", crate::clean_error(&e)), crate::now_ms()));
-            }
-        } else if self.ui.autosave && dirty_xlsx {
-            // Keep checking even when no input arrives while the window is hidden.
-            ctx.request_repaint_after(std::time::Duration::from_secs(2));
-        }
-    }
-
-    /// Flip AutoSave (title-bar switch / Options ▸ Save). Persisted with the other UI
-    /// preferences, so it stays as the user left it across restarts (#1901).
-    pub fn toggle_autosave(&mut self) {
-        self.ui.autosave = !self.ui.autosave;
     }
 }

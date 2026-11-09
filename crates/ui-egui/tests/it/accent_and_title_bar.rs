@@ -67,10 +67,10 @@ fn hostile_saved_accents_fall_back_to_the_default_and_keep_the_other_settings() 
         json!(long),
         json!("<script>"),
     ] {
-        let text = json!({"accentColor": value, "autosave": true}).to_string();
+        let text = json!({"accentColor": value, "dark": true}).to_string();
         let state: UiState = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{text:.80}: {e}"));
         assert_eq!(state.accent_color, AccentColor::DEFAULT, "{text:.80}");
-        assert!(state.autosave, "the rest of the file is kept: {text:.80}");
+        assert!(state.dark, "the rest of the file is kept: {text:.80}");
     }
 }
 

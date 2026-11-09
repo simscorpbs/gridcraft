@@ -9,7 +9,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(noundo "file.new", "New Workbook", ["File"], Some("Cmd+N"), "{sample?: \"budget\"|\"sales\"|\"grades\"}", always, new_workbook),
         cmd!(noundo "file.open", "Open…", ["File"], Some("Cmd+O"), "{path} | {name, base64}, plus {password} for a password-protected workbook and {csvAsText?: bool} to keep every csv/tsv/txt field as text, with no number or date conversion (xlsx, xlsm, xls import, xlsb and ods data import, csv, tsv, txt, json)", always, open),
-        cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?} (xlsx by default; .csv/.tsv/.json/.html/.pdf by extension)", has_doc, save),
+        cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?, ifUnchanged?: bool} (xlsx by default; .csv/.tsv/.json/.html/.pdf by extension; AutoSave sends `ifUnchanged`: the workbook's own file is written only if no other device or program changed it since it was read or written here, else nothing is written and the result has `conflict` (changed or missing), see file.resolveConflict) → {saved, path, bytes}", has_doc, save),
         cmd!(noundo "file.saveAs", "Save As…", ["File"], Some("Cmd+Shift+S"), "{path} (.xlsx, .csv, .tsv, .json, .html, or .pdf: a PDF of the active sheet)", has_doc, save_as),
         cmd!(query "file.saveBytes", "Encode Workbook", [], None, "{format?: xlsx|csv|tsv|json|html} → {base64}", has_doc, save_bytes),
         cmd!(noundo "file.close", "Close", ["File"], Some("Cmd+W"), "{force?: bool, document?: bool} (closes the active window, or with `document` the workbook and all its windows; the workbook closes with its last window)", has_doc, close),
@@ -21,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Options",
             ["File"],
             None,
-            "{} → {calculation: {mode, iterative, maxIterations, maxChange, precisionAsDisplayed}} for the active workbook (the interface opens File › Options; change settings with their own commands, e.g. formulas.calculationOptions, view.theme, app.language.set)",
+            "{autosaveByDefault?: bool} → {calculation: {mode, iterative, maxIterations, maxChange, precisionAsDisplayed}, autosaveByDefault?} for the active workbook (the interface opens File › Options; with `autosaveByDefault` it only sets whether AutoSave is on for files with no choice of their own; change other settings with their own commands, e.g. formulas.calculationOptions, view.theme, app.language.set)",
             always,
             options
         ),
@@ -43,7 +43,7 @@ fn new_workbook(s: &mut Session, p: &Json) -> Result<Json> {
     Ok(json!({"index": i, "title": s.doc()?.display_title()}))
 }
 
-fn open(s: &mut Session, p: &Json) -> Result<Json> {
+pub(super) fn open(s: &mut Session, p: &Json) -> Result<Json> {
     let (name, bytes) = if let Some(b) = str_param(p, "base64") {
         (str_param(p, "name").unwrap_or("Book.xlsx").to_string(), crate::io::base64_decode(b).ok_or_else(|| bad("file.open", "invalid base64"))?)
     } else if let Some(path) = str_param(p, "path") {
@@ -86,7 +86,10 @@ fn open(s: &mut Session, p: &Json) -> Result<Json> {
         s.close_document(0);
     }
     // Someone else may have made the file: its active content asks before it runs.
+    let stamp = path.as_deref().and_then(|p| gridcraft_cloud::DiskStamp::of_bytes(std::path::Path::new(p), &bytes).ok());
     let mut doc = DocState::new(wb, path, title, crate::Trust::FromFile);
+    // What AutoSave checks before it writes this file: that it still holds what was just read.
+    doc.stamp = stamp;
     if crate::io::FileKind::from_path(&name).is_none() && gridcraft_xlsx::sniff(&bytes) == gridcraft_xlsx::Format::Xlsx {
         doc.content_kind = Some(crate::io::FileKind::Xlsx);
     }
@@ -106,7 +109,7 @@ fn open(s: &mut Session, p: &Json) -> Result<Json> {
     )
 }
 
-fn save(s: &mut Session, p: &Json) -> Result<Json> {
+pub(super) fn save(s: &mut Session, p: &Json) -> Result<Json> {
     let path = match str_param(p, "path").map(str::to_string).or_else(|| s.active().and_then(|d| d.path.clone())) {
         Some(p) => p,
         None => {
@@ -119,7 +122,15 @@ fn save(s: &mut Session, p: &Json) -> Result<Json> {
     if std::path::Path::new(&path).extension().and_then(std::ffi::OsStr::to_str).is_some_and(|e| e.eq_ignore_ascii_case("pdf")) {
         return super::print::export_pdf(s, &json!({"path": path}));
     }
+    // AutoSave (`ifUnchanged`) never overwrites a file another device or program changed since it
+    // was read or written here: it reports the conflict for `file.resolveConflict` instead.
+    if bool_param(p, "ifUnchanged") == Some(true)
+        && let Some(conflict) = super::cloud::conflict_before_save(s, &path)?
+    {
+        return Ok(json!({"saved": false, "conflict": conflict.id(), "path": path}));
+    }
     let d = s.doc_mut()?;
+    let (old_path, autosave) = (d.path.clone(), d.autosave);
     // The document's own file keeps the format its content had when opened; any other path
     // goes by its extension. Relative paths to linked workbooks are rewritten for the new folder.
     let kind = crate::io::FileKind::from_path(&path).or(d.content_kind.filter(|_| d.path.as_deref() == Some(path.as_str())));
@@ -141,8 +152,15 @@ fn save(s: &mut Session, p: &Json) -> Result<Json> {
         }
         d.saved = d.wb.clone();
         d.path = Some(path.clone());
+        // The file as just written is what AutoSave guards from now on.
+        d.stamp = gridcraft_cloud::DiskStamp::of_bytes(std::path::Path::new(&path), &bytes).ok();
+        d.conflict = None;
+        // Save As (and Save to Cloud, and keeping both) gives the new file the switch the workbook had.
+        if old_path.as_deref() != Some(path.as_str()) {
+            s.autosave_follows(&path, autosave);
+        }
     }
-    Ok(json!({"path": path, "bytes": bytes.len()}))
+    Ok(json!({"saved": true, "path": path, "bytes": bytes.len()}))
 }
 
 fn save_as(s: &mut Session, p: &Json) -> Result<Json> {
@@ -175,8 +193,16 @@ fn close(s: &mut Session, p: &Json) -> Result<Json> {
     let force = bool_param(p, "force").unwrap_or(false);
     let d = s.doc()?;
     if d.is_dirty() && !force {
-        s.ui_requests.push(crate::UiRequest::Dialog("saveChanges".into(), json!({"title": d.display_title()})));
-        return Ok(json!({"closed": false, "dirty": true}));
+        // With AutoSave on, the changes are written and the workbook closes without the question.
+        match s.autosave_before_discard(d.uid) {
+            super::cloud::Flush::Saved => {}
+            super::cloud::Flush::Conflict(_) => return Ok(json!({"closed": false, "dirty": true, "conflict": true})),
+            super::cloud::Flush::Ask => {
+                let title = s.doc()?.display_title();
+                s.ui_requests.push(crate::UiRequest::Dialog("saveChanges".into(), json!({"title": title})));
+                return Ok(json!({"closed": false, "dirty": true}));
+            }
+        }
     }
     let i = s.active_index();
     s.close_document(i);
@@ -221,8 +247,14 @@ fn properties(s: &mut Session, p: &Json) -> Result<Json> {
 
 /// File › Options: reports the workbook-level settings and asks the interface to show its Options
 /// page. Nothing changes here; every setting has its own command.
-fn options(s: &mut Session, _: &Json) -> Result<Json> {
-    s.ui_requests.push(crate::UiRequest::Dialog("options".into(), json!({})));
+fn options(s: &mut Session, p: &Json) -> Result<Json> {
+    // File > Options > Save > Turn on AutoSave by default is the one setting kept here: it is
+    // application-wide, and the workbooks follow it unless their file has a choice of its own.
+    if let Some(on) = bool_param(p, "autosaveByDefault") {
+        s.set_autosave_by_default(on);
+    } else {
+        s.ui_requests.push(crate::UiRequest::Dialog("options".into(), json!({})));
+    }
     let calculation = s.active().map(|d| {
         let c = &d.wb.calc;
         let mode = match c.mode {
@@ -232,7 +264,11 @@ fn options(s: &mut Session, _: &Json) -> Result<Json> {
         };
         json!({"mode": mode, "iterative": c.iterative, "maxIterations": c.max_iterations, "maxChange": c.max_change, "precisionAsDisplayed": c.precision_as_displayed})
     });
-    Ok(json!({"calculation": calculation}))
+    let mut r = json!({"calculation": calculation});
+    if bool_param(p, "autosaveByDefault").is_some() {
+        r["autosaveByDefault"] = json!(s.prefs.autosave_by_default);
+    }
+    Ok(r)
 }
 
 fn activate_window(s: &mut Session, p: &Json) -> Result<Json> {
@@ -260,10 +296,17 @@ fn close_window(s: &mut Session, p: &Json) -> Result<Json> {
     let force = bool_param(p, "force").unwrap_or(false);
     let d = s.documents().iter().find(|d| d.uid == doc).ok_or(crate::EngineError::NoDocument)?;
     if d.is_dirty() && !force {
-        let title = d.display_title();
+        let (title, uid) = (d.display_title(), d.uid);
         s.activate_window(id);
-        s.ui_requests.push(crate::UiRequest::Dialog("saveChanges".into(), json!({"title": title})));
-        return Ok(json!({"closed": false, "dirty": true}));
+        // With AutoSave on, the changes are written and the workbook closes without the question.
+        match s.autosave_before_discard(uid) {
+            super::cloud::Flush::Saved => {}
+            super::cloud::Flush::Conflict(_) => return Ok(json!({"closed": false, "dirty": true, "conflict": true})),
+            super::cloud::Flush::Ask => {
+                s.ui_requests.push(crate::UiRequest::Dialog("saveChanges".into(), json!({"title": title})));
+                return Ok(json!({"closed": false, "dirty": true}));
+            }
+        }
     }
     s.close_window(id);
     Ok(json!({"closed": true, "document": true}))

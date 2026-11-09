@@ -143,7 +143,7 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 ### 16. Collaboration and review (F)
 - No co-authoring, Show Changes, comment navigation, notes ↔ comments
-  conversion; cloud storage requested (#86). **Estimate:** 35–55 h (co-authoring scope needs the owner).
+  conversion; AutoSave in the folders iCloud Drive, Google Drive and OneDrive keep is done ([cloud.md](cloud.md), #86); no cloud API, server-side merge or version history yet. **Estimate:** 30–50 h (co-authoring scope needs the owner).
 
 ### 17. Insert objects (F)
 - Ink strokes now survive XLSX save/reopen as editable polylines. Inserted icons still lose their

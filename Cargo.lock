@@ -2083,6 +2083,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "gridcraft-cloud"
+version = "0.16.0"
+
+[[package]]
 name = "gridcraft-core"
 version = "0.16.0"
 dependencies = [
@@ -2099,6 +2103,7 @@ version = "0.16.0"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-chart",
+ "gridcraft-cloud",
  "gridcraft-core",
  "gridcraft-formula",
  "gridcraft-functions",
@@ -2188,6 +2193,7 @@ dependencies = [
  "egui_kittest",
  "epaint_default_fonts",
  "gridcraft-chart",
+ "gridcraft-cloud",
  "gridcraft-engine",
  "gridcraft-xlsx",
  "image",

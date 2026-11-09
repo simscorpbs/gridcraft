@@ -334,8 +334,22 @@ fn closing_the_window_can_save_first_and_a_saved_workbook_closes_at_once() {
     assert!(!sent.contains(&egui::ViewportCommand::CancelClose), "nothing unsaved: the window just closes");
     assert!(h.state().dialog.is_none());
 
-    // A cell still being typed is an unsaved change too.
+    // A cell still being typed is an unsaved change too. With AutoSave on for the file (the
+    // default) it is entered and written, and the window closes without a question.
     h.input_mut().events.push(egui::Event::Text("123".into()));
+    h.run_steps(2);
+    assert!(h.state().editor.is_some());
+    let sent = request_window_close(&mut h);
+    assert!(sent.contains(&egui::ViewportCommand::Close), "{sent:?}");
+    assert!(h.state().dialog.is_none(), "AutoSave wrote the change: no Save Changes question");
+    let (wb, _) = gridcraft_engine::io::open_bytes("Book.xlsx", &std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(wb.active().unwrap().value(CellRef::new(0, 0)), Value::Number(123.0), "AutoSave wrote the change before closing");
+
+    // With AutoSave off for the file, the question stays and Save writes the change.
+    let mut h = harness(Services::default());
+    h.state_mut().run("file.open", serde_json::json!({"path": &path})).unwrap();
+    h.state_mut().run("file.autosave", serde_json::json!({"value": false})).unwrap();
+    h.input_mut().events.push(egui::Event::Text("456".into()));
     h.run_steps(2);
     assert!(h.state().editor.is_some());
     let sent = request_window_close(&mut h);
@@ -343,7 +357,7 @@ fn closing_the_window_can_save_first_and_a_saved_workbook_closes_at_once() {
     let sent = click_commands(&mut h, "Save");
     assert!(sent.contains(&egui::ViewportCommand::Close), "{sent:?}");
     let (wb, _) = gridcraft_engine::io::open_bytes("Book.xlsx", &std::fs::read(&path).unwrap()).unwrap();
-    assert_eq!(wb.active().unwrap().value(CellRef::new(0, 0)), Value::Number(123.0), "Save wrote the change before closing");
+    assert_eq!(wb.active().unwrap().value(CellRef::new(0, 0)), Value::Number(456.0), "Save wrote the change before closing");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

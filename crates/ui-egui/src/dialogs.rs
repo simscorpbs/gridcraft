@@ -15,6 +15,7 @@ use crate::theme;
 
 mod about;
 mod analysis;
+mod autosave;
 mod charts;
 mod command_search;
 mod cond_format_rules;
@@ -1112,6 +1113,14 @@ impl Dialog {
             "controlQuestion" => return crate::control_ui::open_question(&params),
             "saveCopy" => Dialog::custom("saveCopy", "Save a Copy", json!({"format": p("format")})),
             "saveChanges" => Dialog::custom("saveChanges", "Save Changes?", json!({"title": p("title"), "quit": p("quit")})),
+            "saveConflict" => {
+                // Asked about now: not again at once when the answer is "Decide later".
+                if let Some(uid) = app.session.active().map(|d| d.uid) {
+                    app.conflict_asked.insert(uid);
+                }
+                Dialog::custom("saveConflict", "Save Conflict", json!({"title": p("title"), "missing": p("missing")}))
+            }
+            "saveToCloud" => Dialog::custom("saveToCloud", "Save to Cloud", json!({"name": p("name")})),
             "start" => Dialog::custom("start", "GridCraft", json!({})),
             "comments" => {
                 app.grid.pane = None;
