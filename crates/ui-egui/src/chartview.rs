@@ -204,7 +204,7 @@ fn paint_shape_text(p: &Painter, wb: &Workbook, sp: &gridcraft_engine::model::Sh
     let default_color = if text_box { Color32::BLACK } else { Color32::WHITE };
     let color = f.text_color.and_then(|c| c.resolve(&wb.theme)).map(theme::color32).unwrap_or(default_color);
     // Default 14 px (as before); a set size is in points.
-    let size = f.font_size.map_or(14.0, |pt| pt * 96.0 / 72.0).clamp(1.0, 2000.0) * z;
+    let size = f.font_size.map_or(14.0, |pt| pt * crate::metrics::px_per_pt()).clamp(1.0, 2000.0) * z;
     let family = theme::cell_family(f.font.as_deref().unwrap_or(""), f.bold, f.italic);
     let inset = 4.0;
     let width = (r.width() - 2.0 * inset).max(1.0);
@@ -232,7 +232,7 @@ fn paint_shape_text(p: &Painter, wb: &Workbook, sp: &gridcraft_engine::model::Sh
     if let Some((c, w)) = f.text_outline
         && let Some(oc) = c.resolve(&wb.theme).map(theme::color32)
     {
-        let d = (w * 96.0 / 72.0 * z / 2.0).clamp(0.5, 20.0);
+        let d = (w * crate::metrics::px_per_pt() * z / 2.0).clamp(0.5, 20.0);
         for (dx, dy) in [(-1.0, -1.0), (0.0, -1.0), (1.0, -1.0), (-1.0, 0.0), (1.0, 0.0), (-1.0, 1.0), (0.0, 1.0), (1.0, 1.0)] {
             clip.galley_with_override_text_color(pos + vec2(dx * d, dy * d), g.clone(), oc);
         }

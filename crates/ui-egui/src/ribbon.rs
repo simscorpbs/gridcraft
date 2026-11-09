@@ -49,7 +49,8 @@ const _: () = assert!(TITLE_CONTROL_H < TITLE_BAR_H, "title-bar controls keep a 
 pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let collapsed = app.ui.ribbon_collapsed;
-    let h = if collapsed { 34.0 } else { 34.0 + 92.0 };
+    let m = crate::metrics::Metrics::current();
+    let h = m.ribbon_panel_h(collapsed);
     // A contextual tab exists only while its object is selected (Excel hides Table Design once the
     // cell leaves the table); a remembered one that is gone would draw an empty ribbon.
     if CONTEXTUAL_TABS.contains(&app.ui.ribbon_tab.as_str()) && !contextual_tabs(app).contains(&app.ui.ribbon_tab.as_str()) {
@@ -57,10 +58,10 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     }
     egui::Panel::top("ribbon")
         .exact_size(h)
-        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 6 }))
+        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: m.ribbon_inset_x as i8, right: m.ribbon_inset_x as i8, top: 0, bottom: 6 }))
         .show(ui, |ui| {
             // Tabs row.
-            let tabs_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), 32.0));
+            let tabs_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), m.tab_row_h));
             ui.scope_builder(egui::UiBuilder::new().max_rect(tabs_rect), |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
@@ -77,7 +78,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                         let font = theme::ui_font(13.5);
                         let label = app.ui.language.tr(tab);
                         let tw = ui.painter().layout_no_wrap(label.to_string(), font.clone(), t.text).size().x;
-                        let (r, resp) = ui.allocate_exact_size(vec2(tw + 22.0, 30.0), Sense::click());
+                        let (r, resp) = ui.allocate_exact_size(vec2(tw + 22.0, m.tab_cell_h()), Sense::click());
                         if resp.hovered() && !active {
                             ui.painter().rect_filled(r.shrink2(vec2(2.0, 4.0)), 5.0, t.hover);
                         }
@@ -121,10 +122,17 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             let left = ui.cursor().min.x;
             let screen = ui.ctx().content_rect();
             let fits = (screen.right() - left - (left - screen.left()).max(0.0)).max(0.0);
-            let card = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width().min(fits), 88.0));
+            // Excel for Mac: the card starts exactly where the tab row ends (70 pt from the window
+            // top with the title bar), under a 1 pt line across the window.
+            let top = if m.mac { pos2(ui.cursor().min.x, tabs_rect.bottom()) } else { ui.cursor().min };
+            let card = Rect::from_min_size(top, vec2(ui.available_width().min(fits), m.ribbon_card_h));
+            if m.mac {
+                let y = card.top() - 0.5;
+                ui.painter().line_segment([pos2(screen.left(), y), pos2(screen.right(), y)], Stroke::new(1.0, t.ribbon_line));
+            }
             ui.painter().rect_filled(card, 10.0, t.ribbon);
             ui.painter().rect_stroke(card, 10.0, Stroke::new(1.0, t.ribbon_border), StrokeKind::Inside);
-            let inner = card.shrink2(vec2(10.0, 6.0));
+            let inner = card.shrink2(vec2(10.0, m.ribbon_inset_y));
             ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
                 // One scroll state per tab: a tab opened after scrolling another starts at its
                 // left edge, and a tab keeps its own offset while others are used.
@@ -142,7 +150,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                 }
                 let scroll = area.show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                        ui.spacing_mut().item_spacing = vec2(2.0, m.ribbon_spacing_y);
                         match app.ui.ribbon_tab.as_str() {
                             "Home" => home(app, ui),
                             "Insert" => insert(app, ui),
@@ -251,7 +259,7 @@ fn scroll_arrows(ui: &mut Ui, t: &Tokens, tab: &str, scroll: egui::scroll_area::
 fn file_menu(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let label = egui::RichText::new(app.ui.language.tr("File")).font(theme::ui_font(13.5)).color(t.accent);
-    let file = ui.add(egui::Button::new(label).frame(false).min_size(vec2(46.0, 30.0)));
+    let file = ui.add(egui::Button::new(label).frame(false).min_size(vec2(46.0, crate::metrics::Metrics::current().tab_cell_h())));
     if file.clicked() {
         app.open_backstage(crate::backstage::Page::Home);
     }

@@ -34,7 +34,7 @@ pub(super) const TITLE_CONTROL_H: f32 = if MAC { 22.0 } else { 26.0 };
 pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ch = TITLE_CONTROL_H;
-    egui::Panel::top("title_bar").exact_size(TITLE_BAR_H).frame(egui::Frame::NONE.fill(t.window)).show(ui, |ui| {
+    egui::Panel::top("title_bar").exact_size(crate::metrics::Metrics::current().title_bar_h).frame(egui::Frame::NONE.fill(t.window)).show(ui, |ui| {
         let rect = ui.max_rect();
         // Dragging the empty title area moves the window.
         let bg = ui.interact(rect, ui.scope_id().with("drag_title"), Sense::click_and_drag());
@@ -157,7 +157,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 if __k.clicked() {
                     app.open_dialog("commandSearch", json!({}));
                 }
-                let share = small_button(ui, Icon::Share, "Share", "Share: export or save a copy", true);
+                let share = share_button(ui, &t);
                 egui::Popup::menu(&share).show(|ui| {
                     if ui.button(crate::i18n::tr(ui, "Export as PDF…")).clicked() {
                         app.run_or_alert("file.exportPdf", json!({}));
@@ -342,5 +342,44 @@ mod title_bar_tests {
     fn no_room_draws_nothing_but_does_not_crash() {
         let (_, w, _) = layout_title("Book1.xlsx", true, 0.0);
         assert!(w <= 20.0, "a zero-width slot leaves at most the ellipsis: {w}");
+    }
+}
+
+/// The title bar's Share button. Excel for Mac draws it as a 17 pt filled green pill with white
+/// text; elsewhere it is the ordinary ribbon button.
+fn share_button(ui: &mut Ui, t: &Tokens) -> egui::Response {
+    const LABEL: &str = "Share";
+    const TIP: &str = "Share: export or save a copy";
+    let Some(h) = crate::metrics::Metrics::current().share_button_h else {
+        return small_button(ui, Icon::Share, LABEL, TIP, true);
+    };
+    let label = crate::i18n::tr(ui, LABEL);
+    let font = theme::ui_bold(12.0);
+    let text = ui.painter().layout_no_wrap(label.to_string(), font, t.on_accent);
+    let (rect, resp) = ui.allocate_exact_size(vec2(text.size().x + 24.0, h), Sense::click());
+    let fill = if resp.hovered() { t.accent_dark } else { t.share };
+    ui.painter().rect_filled(rect, h / 2.0, fill);
+    ui.painter().galley(rect.center() - text.size() / 2.0, text, t.on_accent);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+    resp.on_hover_text(crate::i18n::tr(ui, TIP))
+}
+
+/// The Mac Share button is the audited 17 pt tall.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mac_share_button_is_a_17_pt_green_pill() {
+        let _mac = crate::metrics::force_mac();
+        let ctx = egui::Context::default();
+        let mut size = None;
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let t = Tokens::light();
+            size = Some(share_button(ui, &t).rect.size());
+        });
+        out.textures_delta.clear();
+        assert_eq!(size.map(|s| s.y), Some(17.0));
+        assert_eq!(Tokens::light().share, Color32::from_rgb(0x14, 0x6B, 0x32));
     }
 }

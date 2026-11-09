@@ -151,13 +151,14 @@ fn paint_gridlines(q: &QuadrantPaint<'_>) {
         let left = geo.x(sh, c0);
         let right = geo.x_end(sh, c1);
         let xs = (c0..=c1).filter(|&c| sh.col_width(c) > 0.0).map(|c| geo.x(sh, c)).chain([right]);
+        let ppp = p.ctx().pixels_per_point();
         for x in xs {
-            let x = x.round() - 0.5;
+            let x = crate::metrics::snap_line(x, 1.0, ppp);
             p.line_segment([pos2(x, top), pos2(x, bottom)], stroke);
         }
         let ys = (r0..=r1).filter(|&r| sh.row_height(r) > 0.0).map(|r| geo.y(sh, r)).chain([bottom]);
         for y in ys {
-            let y = y.round() - 0.5;
+            let y = crate::metrics::snap_line(y, 1.0, ppp);
             p.line_segment([pos2(left, y), pos2(right, y)], stroke);
         }
     }
@@ -359,7 +360,7 @@ fn paint_cell(q: &QuadrantPaint<'_>, painted: &(CellRef, Rect, Look, Option<CfLo
     let text_rect = Rect::from_min_max(rect.min, pos2((rect.right() - filter_space).max(rect.left()), rect.bottom()));
     let rect = &text_rect;
     let st = &lk.style;
-    let size = st.font.size * 96.0 / 72.0 * z;
+    let size = st.font.size * crate::metrics::px_per_pt() * z;
     let fam = theme::cell_family(&st.font.name, st.font.bold, st.font.italic);
     let font = FontId::new(size, fam);
     // Digits fit by the cell's own font and size, not the default 11pt (9pt marks in narrow columns).

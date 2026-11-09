@@ -1,4 +1,4 @@
-use super::{Arc, COL_HEADER_H, CellRef, DISPLAY_SCALE, LineIndex, MAX_COLS, MAX_ROWS, Pos2, RangeRef, Rect, Sheet, pos2};
+use super::{Arc, CellRef, DISPLAY_SCALE, LineIndex, MAX_COLS, MAX_ROWS, Pos2, RangeRef, Rect, Sheet, pos2};
 
 /// Geometry of the grid for one frame (handles zoom and frozen panes).
 #[derive(Clone)]
@@ -35,12 +35,13 @@ impl Geo {
     pub fn new(sh: &Sheet, rect: Rect, scroll: egui::Vec2) -> Geo {
         let zoom = (sh.zoom as f32 / 100.0).clamp(0.1, 4.0);
         let z = zoom * DISPLAY_SCALE;
-        let header_h = if sh.show_headings { (COL_HEADER_H * zoom.max(0.75)).round() } else { 0.0 };
+        let m = crate::metrics::Metrics::current();
+        let header_h = if sh.show_headings { m.col_header_h_at(zoom) } else { 0.0 };
         let ri = std::sync::Arc::new(LineIndex::new(&sh.rows, sh.default_row_height, MAX_ROWS));
         let ci = std::sync::Arc::new(LineIndex::new(&sh.cols, sh.default_col_width, MAX_COLS));
         let last_row = ri.at((scroll.y + rect.height() / z) as f64 + 200.0) + 1;
         let digits = (last_row as f32).log10().floor() as i32 + 1;
-        let header_w = if sh.show_headings { ((digits.max(2) as f32 * 7.0 + 14.0) * zoom.max(0.75)).round() } else { 0.0 };
+        let header_w = if sh.show_headings { m.row_header_w(digits, zoom) } else { 0.0 };
         let (fr, fc) = sh.freeze.unwrap_or((0, 0));
         let frozen_w = (ci.start(fc) as f32) * z;
         let frozen_h = (ri.start(fr) as f32) * z;

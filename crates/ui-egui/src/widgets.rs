@@ -645,7 +645,11 @@ pub fn notice_bar(app: &mut SheetApp, ui: &mut Ui) {
     };
     let mut dismiss = false;
     let mut action: Option<(String, String)> = None;
-    egui::Panel::top("notice_bar").frame(egui::Frame::NONE.fill(bg).inner_margin(egui::Margin::symmetric(12, 0))).show(ui, |ui| {
+    let mut panel = egui::Panel::top("notice_bar").frame(egui::Frame::NONE.fill(bg).inner_margin(egui::Margin::symmetric(12, 0)));
+    if let Some(h) = crate::metrics::Metrics::current().notice_bar_h {
+        panel = panel.exact_size(h);
+    }
+    panel.show(ui, |ui| {
         // Bottom border as a 1px strip spanning the bar.
         let bar = ui.max_rect();
         ui.painter().rect_stroke(bar, 0.0, Stroke::new(1.0, border), StrokeKind::Inside);

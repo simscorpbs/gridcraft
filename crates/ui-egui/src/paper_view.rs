@@ -224,7 +224,7 @@ fn section_rects(geo: &Geo, pg: &PageGrid, (i, j): (usize, usize), footer: bool)
 }
 
 fn hf_font(geo: &Geo, pg: &PageGrid, size_pt: Option<f32>, bold: bool) -> FontId {
-    let px = size_pt.unwrap_or(10.0).clamp(1.0, 72.0) * 96.0 / 72.0 * pg.hf_text_k * geo.z;
+    let px = size_pt.unwrap_or(10.0).clamp(1.0, 72.0) * crate::metrics::px_per_pt() * pg.hf_text_k * geo.z;
     let px = px.clamp(4.0, 120.0);
     if bold { theme::ui_bold(px) } else { theme::ui_font(px) }
 }

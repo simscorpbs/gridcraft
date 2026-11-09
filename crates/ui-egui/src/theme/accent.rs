@@ -78,6 +78,7 @@ impl AccentColor {
             t.active_row = tint(light, 0x2C);
             t.on_accent = on_accent(light);
         }
+        t.share = t.accent;
         // The sheet stays white in both themes, so what is drawn on it uses the light value.
         t.sel_border = light;
         t.sheet_fill = light;
@@ -90,7 +91,7 @@ impl AccentColor {
     fn on_light(self) -> Color32 {
         let mut c = self.color32();
         for _ in 0..64 {
-            if contrast(c, Color32::from_rgb(0xF3, 0xF3, 0xF3)) >= 4.5 && contrast(c, Color32::from_rgb(0xDD, 0xDD, 0xDD)) >= 3.5 {
+            if contrast(c, Color32::from_rgb(0xF2, 0xF2, 0xF2)) >= 4.5 && contrast(c, Color32::from_rgb(0xDD, 0xDD, 0xDD)) >= 3.5 {
                 break;
             }
             c = mix(c, Color32::BLACK, 0.06);

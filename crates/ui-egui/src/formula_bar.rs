@@ -19,18 +19,16 @@ pub const MAX_DRAG_LINES: usize = 100;
 const HANDLE: f32 = 4.0;
 /// What an expanded bar leaves below it: the status bar (26) and sheet tabs (32), and the
 /// worksheet's column headings and two rows, so the grid never disappears in a short window.
-const KEEP_BELOW: f32 = 26.0 + 32.0 + crate::grid::COL_HEADER_H + 2.0 * gridcraft_engine::model::DEFAULT_ROW_HEIGHT;
-/// The bar's height at one line.
-const ONE_LINE: f32 = 30.0;
-/// What the bar adds around the field's rows: the panel's margins (3 + 3), the field's (3 + 3)
-/// and two pixels for the rounding to the pixel grid.
-const PAD: f32 = 14.0;
+fn keep_below() -> f32 {
+    let m = crate::metrics::Metrics::current();
+    m.status_bar_h + m.sheet_tabs_h + m.col_header_h + 2.0 * gridcraft_engine::model::DEFAULT_ROW_HEIGHT
+}
 
 /// The bar's height for one line of a font whose rows are `row_h` tall: Excel's 30 px, unless
 /// the rows need more (the Windows UI font's row is 17.28 px). Every line counted must fit in
 /// the field, whatever the font; `n` lines take `one_line(row_h) + (n - 1) * row_h`.
 pub fn one_line(row_h: f32) -> f32 {
-    ONE_LINE.max(row_h + PAD)
+    crate::metrics::Metrics::current().formula_one_line(row_h)
 }
 /// How long the bar takes to grow or shrink to a new line count.
 const EASE_SECONDS: f32 = 0.12;
@@ -100,9 +98,12 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     let target = one_line(row_h) + (lines - 1) as f32 * row_h;
     let h = ui.ctx().animate_value_with_time(egui::Id::unique("formula_bar.height"), target, EASE_SECONDS);
     let mut layout = BarLayout { height: h, ..Default::default() };
+    let m = crate::metrics::Metrics::current();
+    let ch = m.formula_control_h;
+    let my = m.formula_margin_y as i8;
     let panel = egui::Panel::top("formula_bar")
         .exact_size(h)
-        .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 8, right: 8, top: 3, bottom: 3 }))
+        .frame(egui::Frame::NONE.fill(t.formula_bar).inner_margin(egui::Margin { left: 8, right: 8, top: my, bottom: my }))
         .show(ui, |ui| {
             // Top-aligned: the Name Box and buttons stay on the first line as the field grows.
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
@@ -111,14 +112,14 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 ui.add_space(4.0);
                 let editing = app.editor.is_some();
                 let c = if editing { t.text } else { t.text_disabled };
-                let cancel = crate::widgets::icon_button(ui, Icon::Close, c, "Cancel", vec2(22.0, 24.0));
+                let cancel = crate::widgets::icon_button(ui, Icon::Close, c, "Cancel", vec2(22.0, ch));
                 if cancel.clicked() && editing {
                     app.cancel_edit();
                 }
-                if crate::widgets::icon_button(ui, Icon::Check, c, "Enter", vec2(22.0, 24.0)).clicked() && editing {
+                if crate::widgets::icon_button(ui, Icon::Check, c, "Enter", vec2(22.0, ch)).clicked() && editing {
                     app.commit_edit(0, 0, false, false);
                 }
-                let fx = crate::widgets::icon_button(ui, Icon::Fx, t.text, "Insert Function", vec2(26.0, 24.0));
+                let fx = crate::widgets::icon_button(ui, Icon::Fx, t.text, "Insert Function", vec2(26.0, ch));
                 if fx.clicked() {
                     app.open_dialog("insertFunction", json!({}));
                 }
@@ -132,7 +133,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 let field = Rect::from_min_size(ui.cursor().min, vec2(avail, ui.available_height()));
                 ui.painter().rect_filled(field, 4.0, t.input_bg);
                 ui.painter().rect_stroke(field, 4.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
-                let inner = field.shrink2(vec2(6.0, 3.0));
+                let inner = field.shrink2(vec2(6.0, m.formula_text_inset_y));
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner));
                 let id = egui::Id::unique("gridcraft.formula_bar");
                 // A spill child shows its anchor's formula muted and read-only.
@@ -172,7 +173,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 layout.caret = info.caret;
                 ui.allocate_space(vec2(avail, field.height()));
                 let chevron = if app.ui.formula_bar_expanded { Icon::ChevronUp } else { Icon::Chevron };
-                if crate::widgets::icon_button(ui, chevron, t.text_dim, "Expand formula bar", vec2(20.0, 24.0)).clicked() {
+                if crate::widgets::icon_button(ui, chevron, t.text_dim, "Expand formula bar", vec2(20.0, ch)).clicked() {
                     app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
                 }
             });
@@ -183,13 +184,13 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
 
 /// The most lines the bar takes in a window `window_h` tall with `room` left under the ribbon:
 /// half the window, as in Excel (never fewer than the chevron's [`MAX_LINES`]), and no more than
-/// leaves [`KEEP_BELOW`] for the status bar, sheet tabs and a few rows of the grid.
+/// leaves [`keep_below`] for the status bar, sheet tabs and a few rows of the grid.
 fn max_lines(window_h: f32, room: f32, row_h: f32) -> usize {
     let lines_in = |h: f32| {
         let fit = ((h - one_line(row_h)) / row_h).floor();
         if fit.is_finite() && fit > 0.0 { fit as usize + 1 } else { 1 }
     };
-    lines_in(window_h * 0.5).clamp(MAX_LINES, MAX_DRAG_LINES).min(lines_in(room - KEEP_BELOW))
+    lines_in(window_h * 0.5).clamp(MAX_LINES, MAX_DRAG_LINES).min(lines_in(room - keep_below()))
 }
 
 /// The lines a bar whose top is at `top` shows with its bottom edge dragged to `y`, in whole lines.
@@ -342,8 +343,9 @@ fn python_badge(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Option<Rec
         return None;
     }
     let text = ui.painter().layout_no_wrap("PY".into(), theme::ui_bold(11.0), t.on_badge);
-    let (rect, resp) = ui.allocate_exact_size(vec2(text.size().x + 12.0, 24.0), Sense::click());
-    let pill = Rect::from_center_size(rect.center(), vec2(rect.width(), 18.0));
+    let ch = crate::metrics::Metrics::current().formula_control_h;
+    let (rect, resp) = ui.allocate_exact_size(vec2(text.size().x + 12.0, ch), Sense::click());
+    let pill = Rect::from_center_size(rect.center(), vec2(rect.width(), ch.min(18.0)));
     ui.painter().rect_filled(pill, 4.0, t.badge_py);
     ui.painter().galley(pill.center() - text.size() / 2.0, text, t.on_badge);
     let label = app.ui.language.tr("Python Mode").to_string();
@@ -360,10 +362,11 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Rect {
     let id = egui::Id::unique("gridcraft.name_box");
     let shown = app.name_box_text();
     let mut text = app.name_box.clone().unwrap_or(shown.clone());
-    let rect = Rect::from_min_size(ui.cursor().min, vec2(118.0, 24.0));
+    let ch = crate::metrics::Metrics::current().formula_control_h;
+    let rect = Rect::from_min_size(ui.cursor().min, vec2(118.0, ch));
     ui.painter().rect_filled(rect, 4.0, t.input_bg);
     ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(rect.min + vec2(6.0, 3.0), vec2(96.0, 18.0))));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(rect.min + vec2(6.0, ((ch - 18.0) / 2.0).max(0.0)), vec2(96.0, ch.min(18.0)))));
     // The box has no visible label of its own: screen readers and the strict accessibility check
     // need a name (egui 0.37 makes unnamed text inputs a test failure).
     let accessible_name = app.ui.language.tr("Name Box").to_string();
@@ -400,11 +403,11 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) -> Rect {
         }
         app.name_box = None;
     }
-    ui.allocate_space(vec2(118.0, 24.0));
+    ui.allocate_space(vec2(118.0, ch));
     // Dropdown of names.
     let names: Vec<String> =
         app.session.active().map(|d| d.wb.names.iter().filter(|n| !n.hidden).map(|n| n.name.clone()).collect()).unwrap_or_default();
-    let mb = Rect::from_min_size(pos2(rect.right() - 16.0, rect.top() + 4.0), vec2(14.0, 16.0));
+    let mb = Rect::from_min_size(pos2(rect.right() - 16.0, rect.top() + ((ch - 16.0) / 2.0).max(0.0)), vec2(14.0, ch.min(16.0)));
     icons::paint(ui.painter(), mb, Icon::Chevron, t.text_dim);
     let r = ui.interact(mb, id.with("drop"), Sense::click());
     egui::Popup::menu(&r).show(|ui| {
