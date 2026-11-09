@@ -89,13 +89,16 @@ pub fn stop_recording(app: &mut SheetApp) {
             Some(name) => {
                 let steps = v["steps"].as_u64().unwrap_or(0);
                 app.macros.note_recent(name);
-                let mut text = format!("Saved macro “{name}” ({steps} step{})", if steps == 1 { "" } else { "s" });
+                let lang = app.ui.language;
+                let mut text = lang
+                    .plural(steps, "Saved macro “{name}” ({n} step)", "Saved macro “{name}” ({n} steps)")
+                    .replace("{name}", name);
                 if let Some(k) = v["shortcutDropped"].as_str() {
-                    text.push_str(&format!(" without {k}: another macro took it while recording"));
+                    text.push_str(&lang.fmt(" without {key}: another macro took it while recording", &[("key", k)]));
                 }
                 app.toast = Some((text, crate::now_ms()));
             }
-            None => app.toast = Some(("Recording stopped".into(), crate::now_ms())),
+            None => app.toast = Some((app.ui.language.tr("Recording stopped").to_owned(), crate::now_ms())),
         },
         Err(e) => app.message = Some(("Record Macro".into(), crate::clean_error(&e))),
     }
@@ -174,9 +177,10 @@ pub fn note_result(app: &mut SheetApp, id: &str, params: &Json, v: &Json) {
     }
     app.macros.note_recent(&name);
     let ran = v["ran"].as_u64().unwrap_or(0);
+    let lang = app.ui.language;
     let text = match v["stopped"].as_str() {
-        Some(msg) => format!("Macro “{name}” stopped: {msg}"),
-        None => format!("Ran macro “{name}” ({ran} step{})", if ran == 1 { "" } else { "s" }),
+        Some(msg) => lang.fmt("Macro “{name}” stopped: {message}", &[("name", name.as_str()), ("message", msg)]),
+        None => lang.plural(ran, "Ran macro “{name}” ({n} step)", "Ran macro “{name}” ({n} steps)").replace("{name}", &name),
     };
     app.toast = Some((text, crate::now_ms()));
 }

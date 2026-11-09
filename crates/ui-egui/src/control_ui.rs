@@ -11,6 +11,7 @@ use gridcraft_engine::model::{CONTROL_MAX, ControlAction, ControlKind, FormContr
 use serde_json::{Value as Json, json};
 
 use crate::SheetApp;
+use crate::i18n::Language;
 use crate::dialogs::Dialog;
 use crate::grid::Geo;
 use crate::theme::Tokens;
@@ -272,35 +273,35 @@ pub fn open_assign(app: &SheetApp, params: &Json) -> Option<Dialog> {
             v["macro"] = json!(macros(app).first().map(|m| m.0.clone()).unwrap_or_default());
         }
     }
-    Some(Dialog::custom("assignAction", &format!("Assign Action: {}", c.display_name()), v))
+    Some(Dialog::custom("assignAction", &app.ui.language.fmt("Assign Action: {name}", &[("name", c.display_name())]), v))
 }
 
 /// The `control.assign` params the dialog describes, or why it can't yet.
-pub fn assign_params(d: &Dialog) -> Result<Json, String> {
+pub fn assign_params(lang: Language, d: &Dialog) -> Result<Json, String> {
     let id = d.values.get("id").cloned().unwrap_or(Json::Null);
     if val(d, "mode") == "command" {
         let command = val(d, "command");
         if command.trim().is_empty() {
-            return Err("Choose a command.".into());
+            return Err(lang.tr("Choose a command.").into());
         }
         let text = val(d, "params");
         let params: Json = if text.trim().is_empty() {
             json!({})
         } else {
-            serde_json::from_str(&text).map_err(|e| format!("The parameters aren't valid JSON: {e}"))?
+            serde_json::from_str(&text).map_err(|e| lang.fmt("The parameters aren't valid JSON: {error}", &[("error", e.to_string())]))?
         };
         if !params.is_object() {
-            return Err("The parameters must be a JSON object, such as {\"range\": \"A1:B2\"}.".into());
+            return Err(lang.tr("The parameters must be a JSON object, such as {\"range\": \"A1:B2\"}.").into());
         }
         return Ok(json!({"id": id, "command": command.trim(), "params": params}));
     }
     let name = val(d, "macro");
     if name.trim().is_empty() {
-        return Err("Type or choose a macro name.".into());
+        return Err(lang.tr("Type or choose a macro name.").into());
     }
     let input = if val(d, "input") == "fixed" { val(d, "range") } else { "selection".into() };
     if input.trim().is_empty() {
-        return Err("Type the range the macro always runs on.".into());
+        return Err(lang.tr("Type the range the macro always runs on.").into());
     }
     Ok(json!({"id": id, "macro": name.trim(), "input": input.trim(), "output": val(d, "output").trim()}))
 }
@@ -329,8 +330,8 @@ pub fn assign_dialog(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut
     let t = Tokens::get(ui.ctx());
     let mut mode = val(d, "mode");
     ui.horizontal(|ui| {
-        ui.radio_value(&mut mode, "macro".to_string(), "Run a macro");
-        ui.radio_value(&mut mode, "command".to_string(), "Run a command");
+        ui.radio_value(&mut mode, "macro".to_string(), crate::i18n::tr(ui, "Run a macro"));
+        ui.radio_value(&mut mode, "command".to_string(), crate::i18n::tr(ui, "Run a command"));
     });
     d.values.insert("mode".into(), json!(mode));
     ui.add_space(4.0);
@@ -359,9 +360,9 @@ pub fn assign_dialog(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut
         ui.add_space(4.0);
         let mut input = val(d, "input");
         ui.label(crate::i18n::tr(ui, "Run it on:"));
-        ui.radio_value(&mut input, "selection".to_string(), "The selection when the button is pressed");
+        ui.radio_value(&mut input, "selection".to_string(), crate::i18n::tr(ui, "The selection when the button is pressed"));
         ui.horizontal(|ui| {
-            ui.radio_value(&mut input, "fixed".to_string(), "Always this range:");
+            ui.radio_value(&mut input, "fixed".to_string(), crate::i18n::tr(ui, "Always this range:"));
             if input == "fixed" {
                 text_field(ui, d, "range", 160.0);
             }
@@ -397,7 +398,7 @@ pub fn assign_dialog(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut
         ui.add(egui::TextEdit::multiline(&mut params).code_editor().desired_rows(3).desired_width(f32::INFINITY).id_salt("assign_params"));
         d.values.insert("params".into(), json!(params));
     }
-    let problem = assign_params(d).err();
+    let problem = assign_params(app.ui.language, d).err();
     if let Some(p) = &problem {
         ui.label(egui::RichText::new(p).color(t.danger));
     }
@@ -422,7 +423,7 @@ fn ok_cancel(ui: &mut Ui, enabled: bool) -> (bool, bool) {
 
 /// Runs `control.assign` from the dialog. False (with the error shown) when it failed.
 fn assign(app: &mut SheetApp, d: &Dialog) -> bool {
-    let result = assign_params(d).and_then(|params| app.run("control.assign", params).map_err(|e| crate::clean_error(&e)));
+    let result = assign_params(app.ui.language, d).and_then(|params| app.run("control.assign", params).map_err(|e| crate::clean_error(&e)));
     match result {
         Ok(_) => true,
         Err(e) => {
@@ -455,8 +456,32 @@ pub fn open_format(app: &SheetApp, params: &Json) -> Option<Dialog> {
         "print": c.print,
         "locked": c.locked,
     });
-    let title = if text_only { "Edit Text".to_string() } else { format!("Format Control: {}", c.display_name()) };
+    let title = if text_only { app.ui.language.tr("Edit Text").to_string() } else { app.ui.language.fmt("Format Control: {name}", &[("name", c.display_name())]) };
     Some(Dialog::custom("formatControl", &title, v))
+}
+
+/// An engine message about a control's numbers ("Maximum value can be at most 30000."), in the
+/// interface language: the numbers become `{n1}`, `{n2}`… in the catalog key, so each shape of
+/// message is one row. A shape without a row shows as the engine wrote it.
+fn localize_numbers(lang: Language, english: &str) -> String {
+    let mut key = String::new();
+    let mut numbers: Vec<(String, String)> = Vec::new();
+    let mut chars = english.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c.is_ascii_digit() {
+            let mut n = String::from(c);
+            while let Some(&d) = chars.peek().filter(|d| d.is_ascii_digit()) {
+                n.push(d);
+                chars.next();
+            }
+            let name = format!("n{}", numbers.len() + 1);
+            key.push_str(&format!("{{{name}}}"));
+            numbers.push((name, n));
+        } else {
+            key.push(c);
+        }
+    }
+    lang.fmt(&key, &numbers.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>())
 }
 
 fn whole(text: &str) -> Option<u32> {
@@ -466,8 +491,9 @@ fn whole(text: &str) -> Option<u32> {
 /// The `control.format` params the dialog describes, or the first problem with them (the same
 /// rules the engine checks, so OK is only offered when it will work).
 pub fn format_params(app: &SheetApp, d: &Dialog) -> Result<Json, String> {
-    let id = d.values.get("id").and_then(Json::as_u64).and_then(|i| u32::try_from(i).ok()).ok_or("The control is gone.")?;
-    let c = control(app, id).ok_or("The control is gone.")?;
+    let lang = app.ui.language;
+    let id = d.values.get("id").and_then(Json::as_u64).and_then(|i| u32::try_from(i).ok()).ok_or_else(|| lang.tr("The control is gone.").to_owned())?;
+    let c = control(app, id).ok_or_else(|| lang.tr("The control is gone.").to_owned())?;
     let flag = |k: &str| d.values.get(k).and_then(Json::as_bool).unwrap_or(false);
     if d.values.get("textOnly").and_then(Json::as_bool) == Some(true) {
         return Ok(json!({"id": id, "text": val(d, "text")}));
@@ -487,13 +513,13 @@ pub fn format_params(app: &SheetApp, d: &Dialog) -> Result<Json, String> {
         if key == "page" && c.kind != ControlKind::Slider {
             continue;
         }
-        *slot = whole(&val(d, key)).ok_or_else(|| format!("{label} must be a whole number from 0 to {CONTROL_MAX}."))?;
+        *slot = whole(&val(d, key)).ok_or_else(|| lang.fmt("{label} must be a whole number from 0 to {max}.", &[("label", lang.tr(label)), ("max", &CONTROL_MAX.to_string())]))?;
         out[key] = json!(*slot);
     }
-    draft.check_numbers()?;
-    let value = whole(&val(d, "value")).ok_or_else(|| format!("Current value must be a whole number from 0 to {CONTROL_MAX}."))?;
+    draft.check_numbers().map_err(|e| localize_numbers(lang, &e))?;
+    let value = whole(&val(d, "value")).ok_or_else(|| lang.fmt("Current value must be a whole number from 0 to {max}.", &[("max", CONTROL_MAX.to_string())]))?;
     if value < draft.min || value > draft.max {
-        return Err(format!("Current value must be between {} and {}.", draft.min, draft.max));
+        return Err(lang.fmt("Current value must be between {min} and {max}.", &[("min", draft.min.to_string()), ("max", draft.max.to_string())]));
     }
     out["value"] = json!(value);
     out["link"] = json!(val(d, "link").trim());
@@ -523,7 +549,7 @@ pub fn format_dialog(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut
             }
             fields.push(("link", "Cell link:"));
             for (key, label) in fields {
-                ui.label(label);
+                ui.label(crate::i18n::tr(ui, label));
                 text_field(ui, d, key, if key == "link" { 160.0 } else { 90.0 });
                 ui.end_row();
             }
@@ -548,7 +574,7 @@ pub fn format_dialog(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut
         });
         for (key, label) in [("locked", "Locked (when the sheet is protected)"), ("print", "Print object")] {
             let mut on = d.values.get(key).and_then(Json::as_bool).unwrap_or(true);
-            ui.checkbox(&mut on, label);
+            ui.checkbox(&mut on, crate::i18n::tr(ui, label));
             d.values.insert(key.into(), json!(on));
         }
     }
@@ -565,5 +591,27 @@ pub fn format_dialog(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut
             Ok(_) => *open = false,
             Err(e) => app.message = Some(("Format Control".into(), crate::clean_error(&e))),
         }
+    }
+}
+
+#[cfg(test)]
+mod i18n_tests {
+    use super::*;
+
+    #[test]
+    fn engine_number_messages_are_translated_by_shape() {
+        let engine = "Maximum value (5) must be greater than Minimum value (9).";
+        assert_eq!(localize_numbers(Language::En, engine), engine);
+        assert_eq!(localize_numbers(Language::PtBr, engine), "O valor máximo (5) deve ser maior que o valor mínimo (9).");
+        assert_eq!(localize_numbers(Language::PtBr, "Page change can be at most 30000."), "A alteração de página pode ser, no máximo, 30000.");
+        // A message without a row reads as the engine wrote it.
+        assert_eq!(localize_numbers(Language::PtBr, "Something else 12."), "Something else 12.");
+    }
+
+    #[test]
+    fn assign_problems_are_translated() {
+        let d = Dialog::custom("assignAction", "Assign Action: Button 1", json!({"id": 1, "mode": "macro", "macro": "", "input": "selection"}));
+        assert_eq!(assign_params(Language::En, &d).unwrap_err(), "Type or choose a macro name.");
+        assert_eq!(assign_params(Language::PtBr, &d).unwrap_err(), "Digite ou escolha o nome de uma macro.");
     }
 }

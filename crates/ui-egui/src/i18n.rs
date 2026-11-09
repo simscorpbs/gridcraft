@@ -233,6 +233,18 @@ impl Language {
         out
     }
 
+    /// The row for a count: `one` when `n` is 1 and `other` otherwise, with `{n}` filled in.
+    pub fn plural(self, n: u64, one: &str, other: &str) -> String {
+        self.tr(if n == 1 { one } else { other }).replace("{n}", &n.to_string())
+    }
+
+    /// [`Self::fmt`] with a count: picks `one` when `n` is 1 and `other` otherwise, then fills
+    /// `{n}` and the named placeholders. Each form is its own catalog row, so a language with
+    /// other plural rules can word both.
+    pub fn fmt_plural(self, n: u64, one: &str, other: &str, args: &[(&str, impl AsRef<str>)]) -> String {
+        self.fmt(if n == 1 { one } else { other }, args).replace("{n}", &n.to_string())
+    }
+
     pub(crate) fn tr_error(self, message: &str) -> String {
         let message = if message.starts_with("command `") { crate::clean_error(message) } else { message.to_owned() };
 
@@ -413,6 +425,50 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn plural_rows_keep_english_and_fill_the_count() {
+        for (n, en, pt) in [(1, "Ran 1 step.", "1 etapa executada."), (0, "Ran 0 steps.", "0 etapas executadas."), (4, "Ran 4 steps.", "4 etapas executadas.")] {
+            assert_eq!(Language::En.plural(n, "Ran {n} step.", "Ran {n} steps."), en);
+            assert_eq!(Language::PtBr.plural(n, "Ran {n} step.", "Ran {n} steps."), pt);
+        }
+        assert_eq!(Language::En.fmt_plural(2, "{n} file in {dir}", "{n} files in {dir}", &[("dir", "docs")]), "2 files in docs");
+        assert_eq!(Language::PtBr.fmt_plural(1, "Saved macro “{name}” ({n} step)", "Saved macro “{name}” ({n} steps)", &[("name", "M")]), "Macro “M” salva (1 etapa)");
+    }
+
+    #[test]
+    fn shared_english_words_take_their_context_in_portuguese() {
+        assert_eq!(Language::En.tr("Function category|All"), "All");
+        assert_eq!(Language::PtBr.tr("Function category|All"), "Todas");
+        assert_eq!(Language::PtBr.tr("All"), "Tudo");
+        assert_eq!(Language::En.tr("Report layout|Outline"), "Outline");
+        assert_eq!(Language::PtBr.tr("Report layout|Outline"), "Estrutura de Tópicos");
+        assert_eq!(Language::PtBr.tr("Outline"), "Contorno");
+    }
+
+    #[test]
+    fn icon_gallery_names_are_translated_or_stay_as_they_are() {
+        for (name, _) in crate::icons::LIBRARY {
+            let key = format!("Icon|{name}");
+            assert_eq!(Language::En.tr(&key), *name);
+            assert_ne!(Language::PtBr.tr(&key), *name, "{name} has no pt-BR row");
+            assert!(!Language::PtBr.tr(&key).contains('|'));
+            assert_eq!(Language::Ja.tr(&key), *name);
+        }
+    }
+
+    #[test]
+    fn macro_and_control_runtime_rows_exist_in_portuguese() {
+        assert_eq!(Language::PtBr.fmt("Assign Action: {name}", &[("name", "Botão 1")]), "Atribuir Ação: Botão 1");
+        assert_eq!(Language::En.fmt("Format Control: {name}", &[("name", "Slider 1")]), "Format Control: Slider 1");
+        assert_eq!(Language::PtBr.fmt("Layout {n}", &[("n", "3")]), "Layout 3");
+        assert_eq!(Language::En.fmt("Picture: {alt}", &[("alt", "logo")]), "Picture: logo");
+        assert_eq!(Language::PtBr.fmt("Picture: {alt}", &[("alt", "logo")]), "Imagem: logo");
+        assert_eq!(
+            Language::PtBr.fmt("{count} items in this file were handled differently. First: {first}", &[("count", "3"), ("first", "x")]),
+            "3 itens deste arquivo foram tratados de forma diferente. Primeiro: x"
+        );
     }
 
     #[test]

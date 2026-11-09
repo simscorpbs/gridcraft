@@ -99,7 +99,7 @@ impl SheetApp {
     /// Paste a picture from the system clipboard (a screenshot, an image copied in a browser) as
     /// a floating picture whose top-left corner is the active cell, as Excel does.
     pub fn paste_picture(&mut self, image: image::RgbaImage) {
-        match encode_png(&image) {
+        match encode_png(self.ui.language, &image) {
             Ok(png) => self.run_or_alert("insert.picture", json!({"base64": gridcraft_engine::io::base64_encode(&png), "mime": "image/png"})),
             Err(e) => self.alert(e),
         }
@@ -155,12 +155,12 @@ fn check_picture_size(w: u32, h: u32) -> Result<(), String> {
 }
 
 /// PNG bytes of a clipboard picture, refusing sizes that would exhaust memory.
-fn encode_png(image: &image::RgbaImage) -> Result<Vec<u8>, String> {
+fn encode_png(lang: crate::i18n::Language, image: &image::RgbaImage) -> Result<Vec<u8>, String> {
     let (w, h) = image.dimensions();
     check_picture_size(w, h)?;
     let mut png = Vec::new();
     image
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
-        .map_err(|e| format!("The picture on the clipboard can't be pasted: {e}"))?;
+        .map_err(|e| lang.fmt("The picture on the clipboard can't be pasted: {error}", &[("error", e.to_string())]))?;
     Ok(png)
 }

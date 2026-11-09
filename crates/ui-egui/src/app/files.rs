@@ -57,7 +57,7 @@ impl SheetApp {
             let text = if msgs.len() == 1 {
                 msgs[0].to_string()
             } else {
-                format!("{} items in this file were handled differently. First: {}", msgs.len(), msgs[0])
+                self.ui.language.fmt("{count} items in this file were handled differently. First: {first}", &[("count", msgs.len().to_string()), ("first", self.ui.language.tr_error(msgs[0]))])
             };
             self.notice = Some(Notice { text, kind: NoticeKind::Info, action: None });
         }

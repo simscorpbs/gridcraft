@@ -240,16 +240,16 @@ pub(super) fn sort(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
                     _ => "Cell Values",
                 })
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut by, "values".into(), "Cell Values");
-                    ui.selectable_value(&mut by, "cellColor".into(), "Cell Color");
-                    ui.selectable_value(&mut by, "fontColor".into(), "Font Color");
+                    ui.selectable_value(&mut by, "values".into(), crate::i18n::tr(ui, "Cell Values"));
+                    ui.selectable_value(&mut by, "cellColor".into(), crate::i18n::tr(ui, "Cell Color"));
+                    ui.selectable_value(&mut by, "fontColor".into(), crate::i18n::tr(ui, "Font Color"));
                 })
                 .response
                 .accessible_name(lang.tr("Sort On"));
             lv["by"] = json!(by);
             let mut desc = lv["order"].as_str() == Some("desc");
-            ui.radio_value(&mut desc, false, "A to Z");
-            ui.radio_value(&mut desc, true, "Z to A");
+            ui.radio_value(&mut desc, false, crate::i18n::tr(ui, "A to Z"));
+            ui.radio_value(&mut desc, true, crate::i18n::tr(ui, "Z to A"));
             lv["order"] = json!(if desc { "desc" } else { "asc" });
             if crate::widgets::icon_button(ui, Icon::Close, crate::theme::Tokens::get(ui.ctx()).text_dim, "Remove level", vec2(18.0, 18.0)).clicked()
             {

@@ -209,7 +209,7 @@ fn format_chart(app: &mut SheetApp, ui: &mut Ui) {
                 ("Radar", "radar", ""),
             ] {
                 let cur = chart.kind == gridcraft_engine::cmd::insert::chart_kind(k, s);
-                if ui.selectable_label(cur, l).clicked() {
+                if ui.selectable_label(cur, crate::i18n::tr(ui, l)).clicked() {
                     app.run_or_alert("chart.set", json!({"chart": id, "type": k, "subtype": s}));
                 }
             }
@@ -233,7 +233,7 @@ fn format_chart(app: &mut SheetApp, ui: &mut Ui) {
         ui.horizontal(|ui| {
             for (l, v) in [("None", "none"), ("Bottom", "bottom"), ("Top", "top"), ("Left", "left"), ("Right", "right")] {
                 let cur = format!("{:?}", chart.legend).eq_ignore_ascii_case(v);
-                if ui.selectable_label(cur, l).clicked() {
+                if ui.selectable_label(cur, crate::i18n::tr(ui, l)).clicked() {
                     app.run_or_alert("chart.set", json!({"chart": id, "legend": v}));
                 }
             }
@@ -318,7 +318,7 @@ fn format_chart(app: &mut SheetApp, ui: &mut Ui) {
         });
         ui.horizontal(|ui| {
             for n in 1..=6 {
-                if ui.button(format!("Layout {n}")).clicked() {
+                if ui.button(crate::i18n::fmt(ui, "Layout {n}", &[("n", n.to_string())])).clicked() {
                     app.run_or_alert("chart.quickLayout", json!({"chart": id, "layout": n}));
                 }
             }
@@ -332,8 +332,8 @@ fn format_chart(app: &mut SheetApp, ui: &mut Ui) {
         // A file can make a chart larger than the 4,000 points a field otherwise reaches. The
         // range keeps such a size, so the field shows it instead of clamping it to 4,000.
         let range = |v: f32| 40.0..=v.max(4000.0);
-        let a = ui.add(egui::DragValue::new(&mut w).prefix("Width ").range(range(current.0)));
-        let b = ui.add(egui::DragValue::new(&mut h).prefix("Height ").range(range(current.1)));
+        let a = ui.add(egui::DragValue::new(&mut w).prefix(crate::i18n::tr(ui, "Width ")).range(range(current.0)));
+        let b = ui.add(egui::DragValue::new(&mut h).prefix(crate::i18n::tr(ui, "Height ")).range(range(current.1)));
         if a.drag_stopped() || a.lost_focus() || b.drag_stopped() || b.lost_focus() {
             ui.data_mut(|d| d.remove::<(f32, f32)>(draft));
             if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {

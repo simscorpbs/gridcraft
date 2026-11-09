@@ -1,6 +1,21 @@
 use super::controls::act;
 use super::{Align2, Cat, Rect, Sense, SheetApp, Stroke, StrokeKind, Tokens, Ui, json, pos2, theme, vec2};
 
+/// What a table style is called on hover: the file's id (`TableStyleLight1`) in English, Excel's
+/// name for it ("Estilo de Tabela Claro 1") where the catalog has one, the id otherwise.
+pub(super) fn table_style_label(lang: crate::i18n::Language, id: &str) -> String {
+    if lang == crate::i18n::Language::En {
+        return id.to_owned();
+    }
+    for (family, key) in [("Light", "Table Style Light {n}"), ("Medium", "Table Style Medium {n}"), ("Dark", "Table Style Dark {n}")] {
+        if let Some(n) = id.strip_prefix("TableStyle").and_then(|rest| rest.strip_prefix(family)).filter(|n| n.chars().all(|c| c.is_ascii_digit())) {
+            let shown = lang.fmt(key, &[("n", n)]);
+            return if lang.tr(key) == key { id.to_owned() } else { shown };
+        }
+    }
+    id.to_owned()
+}
+
 /// A gallery of table styles drawn as mini tables.
 pub(super) fn table_gallery(app: &mut SheetApp, ui: &mut Ui, cmd: &str) {
     ui.set_width(430.0);
@@ -15,7 +30,7 @@ pub(super) fn table_gallery(app: &mut SheetApp, ui: &mut Ui, cmd: &str) {
                 if resp.hovered() {
                     ui.painter().rect_stroke(r.expand(1.5), 2.0, Stroke::new(2.0, Tokens::get(ui.ctx()).cat(Cat::Orange)), StrokeKind::Outside);
                 }
-                if resp.on_hover_text(&name).clicked() {
+                if resp.on_hover_text(table_style_label(crate::i18n::current(ui.ctx()), &name)).clicked() {
                     act(app, cmd, json!({"style": name}));
                     ui.close();
                 }
@@ -141,5 +156,22 @@ pub(super) fn cell_style_gallery(app: &mut SheetApp, ui: &mut Ui) {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::Language;
+
+    #[test]
+    fn table_styles_are_named_in_the_interface_language() {
+        assert_eq!(table_style_label(Language::En, "TableStyleLight1"), "TableStyleLight1");
+        assert_eq!(table_style_label(Language::PtBr, "TableStyleLight1"), "Estilo de Tabela Claro 1");
+        assert_eq!(table_style_label(Language::PtBr, "TableStyleMedium28"), "Estilo de Tabela Médio 28");
+        assert_eq!(table_style_label(Language::PtBr, "TableStyleDark11"), "Estilo de Tabela Escuro 11");
+        // No row (another language) or an id that is not a numbered style: the id.
+        assert_eq!(table_style_label(Language::Ja, "TableStyleLight1"), "TableStyleLight1");
+        assert_eq!(table_style_label(Language::PtBr, "TableStyleCustom"), "TableStyleCustom");
     }
 }

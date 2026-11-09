@@ -249,7 +249,7 @@ pub(super) fn analysis_toolpak(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Di
         let mut chosen = false;
         egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
             for (id, label) in TOOLS {
-                let r = ui.selectable_label(pick == *id, *label);
+                let r = ui.selectable_label(pick == *id, crate::i18n::tr(ui, label));
                 if r.clicked() {
                     d.values.insert("pick".into(), json!(id));
                 }
@@ -327,10 +327,10 @@ fn solver_options(ui: &mut egui::Ui, d: &mut Dialog, edit: impl Fn(&mut egui::Ui
     let mut done = false;
     egui::Grid::new("solverOptions").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
         for (title, keys) in [("All Methods", &SOLVER_OPTIONS[..2]), ("Evolutionary", &SOLVER_OPTIONS[2..])] {
-            ui.label(egui::RichText::new(title).strong());
+            ui.label(egui::RichText::new(crate::i18n::tr(ui, title)).strong());
             ui.end_row();
             for (key, label, _) in keys {
-                ui.label(*label);
+                ui.label(crate::i18n::tr(ui, label));
                 edit(ui, d, key, 100.0, label);
                 ui.end_row();
             }
