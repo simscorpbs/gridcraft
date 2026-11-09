@@ -1,6 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 use super::updates_ui;
-use super::{SheetApp, desktop_theme};
+use super::{SheetApp, desktop_theme, theme};
 
 impl SheetApp {
     /// Runs a command and shows its error in a message box (for menu/ribbon clicks).
@@ -25,6 +25,12 @@ impl SheetApp {
             ctx.request_repaint();
         }
         self.effective_dark = ctx.theme() == egui::Theme::Dark;
+        // A new accent colour re-installs the visuals of both themes (the choice of theme, spacing
+        // and fonts stay as they are).
+        if theme::current_accent(ctx) != self.ui.accent_color {
+            theme::install_visuals(ctx, self.ui.accent_color);
+            ctx.request_repaint();
+        }
     }
 
     /// Keeps egui's own keyboard zoom and quit shortcuts off and applies GridCraft's zoom factor.

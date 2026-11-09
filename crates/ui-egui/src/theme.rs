@@ -20,8 +20,11 @@ use std::sync::Arc;
 use egui::epaint::text::Blob;
 use egui::{Color32, FontData, FontDefinitions, FontFamily, FontId, Stroke, Visuals};
 
+mod accent;
 mod font_fallback;
 mod font_setup;
+
+pub use accent::AccentColor;
 
 pub use font_fallback::symbol_face_installed;
 #[cfg(test)]
@@ -291,8 +294,14 @@ impl Tokens {
         }
     }
 
+    /// The tokens of the active theme, with the interface accent chosen in File ▸ Options.
     pub fn get(ctx: &egui::Context) -> Tokens {
-        if ctx.global_style().visuals.dark_mode { Tokens::dark() } else { Tokens::light() }
+        Tokens::with_accent(ctx.global_style().visuals.dark_mode, current_accent(ctx))
+    }
+
+    /// The light or dark tokens with `accent` in place of Excel's green.
+    pub fn with_accent(dark: bool, accent: AccentColor) -> Tokens {
+        accent.tokens(dark)
     }
 
     /// One colour of the category palette.
@@ -322,12 +331,40 @@ pub fn contrast(a: Color32, b: Color32) -> f32 {
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
 
+fn accent_data_id() -> egui::Id {
+    egui::Id::unique("gridcraft.accent_color")
+}
+
+/// The accent the visuals were last installed with (Excel green until one is chosen).
+pub fn current_accent(ctx: &egui::Context) -> AccentColor {
+    ctx.data(|d| d.get_temp::<AccentColor>(accent_data_id())).unwrap_or_default()
+}
+
 /// Installs light and dark token visuals in both theme slots, keeps the 2-3 px widget and 8-10 px window/menu corner radii from 0.36, and sets spacing, text styles and the active theme.
 pub fn apply(ctx: &egui::Context, dark: bool) {
+    install_visuals(ctx, current_accent(ctx));
+    ctx.options_mut(|o| o.fallback_theme = egui::Theme::Light);
+    ctx.set_theme(if dark { egui::Theme::Dark } else { egui::Theme::Light });
+    ctx.all_styles_mut(|s| {
+        s.spacing.item_spacing = egui::vec2(6.0, 4.0);
+        s.spacing.button_padding = egui::vec2(6.0, 3.0);
+        s.spacing.interact_size.y = 22.0;
+        s.text_styles.insert(egui::TextStyle::Body, ui_font(13.0));
+        s.text_styles.insert(egui::TextStyle::Button, ui_font(13.0));
+        s.text_styles.insert(egui::TextStyle::Small, ui_font(11.0));
+        s.text_styles.insert(egui::TextStyle::Heading, ui_bold(18.0));
+        s.text_styles.insert(egui::TextStyle::Monospace, FontId::new(12.0, FontFamily::Name(MONO.into())));
+    });
+}
+
+/// Installs the visuals of both themes with `accent`, and remembers it for [`Tokens::get`]. Leaves
+/// the theme choice, spacing and text styles alone, so a new accent applies at once.
+pub fn install_visuals(ctx: &egui::Context, accent: AccentColor) {
+    ctx.data_mut(|d| d.insert_temp(accent_data_id(), accent));
     // Install both palettes before System can switch between the style slots.
     for theme in [egui::Theme::Light, egui::Theme::Dark] {
         let dark = theme == egui::Theme::Dark;
-        let t = if dark { Tokens::dark() } else { Tokens::light() };
+        let t = Tokens::with_accent(dark, accent);
         let mut v = if dark { Visuals::dark() } else { Visuals::light() };
         v.panel_fill = t.window;
         v.window_fill = t.menu_bg;
@@ -352,18 +389,6 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
         v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: t.shadow };
         ctx.set_visuals_of(theme, v);
     }
-    ctx.options_mut(|o| o.fallback_theme = egui::Theme::Light);
-    ctx.set_theme(if dark { egui::Theme::Dark } else { egui::Theme::Light });
-    ctx.all_styles_mut(|s| {
-        s.spacing.item_spacing = egui::vec2(6.0, 4.0);
-        s.spacing.button_padding = egui::vec2(6.0, 3.0);
-        s.spacing.interact_size.y = 22.0;
-        s.text_styles.insert(egui::TextStyle::Body, ui_font(13.0));
-        s.text_styles.insert(egui::TextStyle::Button, ui_font(13.0));
-        s.text_styles.insert(egui::TextStyle::Small, ui_font(11.0));
-        s.text_styles.insert(egui::TextStyle::Heading, ui_bold(18.0));
-        s.text_styles.insert(egui::TextStyle::Monospace, FontId::new(12.0, FontFamily::Name(MONO.into())));
-    });
 }
 
 /// Model colour → egui colour.
@@ -469,6 +494,32 @@ mod contrast_tests {
                 let ratio = contrast(fg, bg);
                 if ratio < min {
                     failures.push(format!("{} theme: {name} is {ratio:.2}:1, needs {min}:1", if t.dark { "dark" } else { "light" }));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "contrast failures:\n{}", failures.join("\n"));
+    }
+
+    /// Every named accent, and colours that would break an unadjusted palette (white, black,
+    /// yellow, near-greys, saturated primaries), keep every pair above its WCAG ratio in both themes.
+    #[test]
+    fn every_accent_preset_and_extreme_colour_meets_wcag_contrast() {
+        let mut accents: Vec<AccentColor> = AccentColor::PRESETS.iter().map(|(_, a)| *a).collect();
+        for hex in [
+            "000000", "FFFFFF", "FFFF00", "FFEB3B", "00FFFF", "FF00FF", "FF0000", "00FF00", "0000FF", "808080", "F3F3F3", "292929", "7F7F7F",
+            "FFC0CB", "010101", "FEFEFE", "A0A000", "336699",
+        ] {
+            accents.extend(AccentColor::parse(hex));
+        }
+        let mut failures = Vec::new();
+        for accent in accents {
+            for dark in [false, true] {
+                let t = Tokens::with_accent(dark, accent);
+                for (name, fg, bg, min) in pairs(&t) {
+                    let ratio = contrast(fg, bg);
+                    if ratio < min {
+                        failures.push(format!("{} {}: {name} is {ratio:.2}:1, needs {min}:1", accent.hex(), if dark { "dark" } else { "light" }));
+                    }
                 }
             }
         }

@@ -105,6 +105,14 @@ pub struct UiState {
     /// AutoSave (the title-bar switch): save saved-to-file .xlsx workbooks shortly after every
     /// change. A preference like the rest of this struct — it stays on across restarts (#1901).
     pub autosave: bool,
+    /// The interface accent colour (File ▸ Options ▸ General); Excel green by default. A saved
+    /// value that is not a six-digit hexadecimal colour reads as the default.
+    pub accent_color: theme::AccentColor,
+    /// File ▸ Options ▸ General: the Discord community button in the title bar. Off by default.
+    pub show_discord: bool,
+    /// File ▸ Options ▸ General: the account avatar (the user's initials) in the title bar. On by
+    /// default, except on macOS, where the integrated title bar keeps to the essentials.
+    pub show_account_picture: bool,
     pub recent: Vec<String>,
     /// One-shot keytip request for a ribbon control: set when a keytip action resolves to
     /// [`keytips::Action::Control`], consumed (and cleared) by the control's render site.
@@ -155,6 +163,9 @@ impl Default for UiState {
             autocomplete: true,
             highlight_active_row: false,
             autosave: false,
+            accent_color: theme::AccentColor::DEFAULT,
+            show_discord: false,
+            show_account_picture: !cfg!(target_os = "macos"),
             recent: vec![],
             keytip_invoke: None,
             keytip_invoke_next: None,

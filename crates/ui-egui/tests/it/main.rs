@@ -6,6 +6,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+mod accent_and_title_bar;
 mod accounting_fill;
 mod active_row_highlight;
 mod advanced_filter;

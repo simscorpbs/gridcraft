@@ -121,6 +121,35 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             let left_end = ui.min_rect().right();
             let right = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(8.0);
+                // Account avatar (Options ▸ General): the user's initials on the accent colour.
+                if app.ui.show_account_picture {
+                    let name = app.session.prefs.user_name.clone();
+                    let name = if name.trim().is_empty() { "GridCraft".to_string() } else { name };
+                    let (r, resp) = ui.allocate_exact_size(vec2(ch, ch), Sense::click());
+                    ui.painter().circle_filled(r.center(), ch / 2.0 - 1.0, t.accent);
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, initials(&name), theme::ui_bold(10.5), t.on_accent);
+                    let label = app.ui.language.tr("Account avatar");
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+                    if resp.on_hover_text(name).clicked() {
+                        app.run_or_alert("ui.backstage", json!({"page": "account"}));
+                    }
+                    ui.add_space(8.0);
+                }
+                // The Discord community button (Options ▸ General, off by default).
+                if app.ui.show_discord {
+                    let label = "Discord";
+                    let (r, resp) = ui.allocate_exact_size(vec2(72.0, 22.0), Sense::click());
+                    ui.painter().rect_filled(r, 11.0, if resp.hovered() { t.accent_dark } else { t.accent });
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, label, theme::ui_bold(12.0), t.on_accent);
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+                    if resp.on_hover_text(app.ui.language.tr("Join the ArtCraft Discord")).clicked() {
+                        match &app.services.open_url {
+                            Some(open) => open(DISCORD_URL),
+                            None => ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD_URL)),
+                        }
+                    }
+                    ui.add_space(8.0);
+                }
                 let __k = icon_button(ui, Icon::Search, t.text_dim, "Search commands", vec2(28.0, ch));
                 control_keytip(app, ui, &__k, "commandSearch");
                 if __k.clicked() {
@@ -163,6 +192,16 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             paint_title(ui, rect.center(), &title, dirty, max_w, t.text);
         });
     });
+}
+
+/// The ArtCraft community, the same link the About box and the Help menu use.
+const DISCORD_URL: &str = "https://discord.gg/artcraft";
+
+/// The avatar's letters: the first letters of the first two words of the name, upper case, or a
+/// single "?" for a blank name.
+fn initials(name: &str) -> String {
+    let letters: String = name.split_whitespace().filter_map(|w| w.chars().next()).take(2).flat_map(char::to_uppercase).collect();
+    if letters.is_empty() { "?".into() } else { letters }
 }
 
 /// Lay out the title truncated to fit `max_w` together with the unsaved marker (when `dirty`).
@@ -216,6 +255,15 @@ mod title_bar_tests {
         let margin = (MAC_TITLE_BAR - MAC_LIGHT) / 2.0;
         let lights_end = MAC_LIGHTS_LEFT + 2.0 * MAC_LIGHT_PITCH + MAC_LIGHT;
         assert_eq!(MAC_CONTENT_LEFT - lights_end, margin);
+    }
+
+    #[test]
+    fn avatar_initials_come_from_the_first_two_words() {
+        assert_eq!(initials("GridCraft User"), "GU");
+        assert_eq!(initials("ana maria souza"), "AM");
+        assert_eq!(initials("  Brenno "), "B");
+        assert_eq!(initials(""), "?");
+        assert_eq!(initials("   "), "?");
     }
 
     #[test]

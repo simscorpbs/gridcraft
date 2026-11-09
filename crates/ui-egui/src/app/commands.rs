@@ -1,6 +1,6 @@
 use super::{
     INTERFACE_SCALE_MAX, INTERFACE_SCALE_MIN, Json, NoticeKind, SheetApp, UiRequest, backstage, clamp_interface_scale, clean_error, dialogs,
-    formula_locale, i18n, json, now_ms, printing,
+    formula_locale, i18n, json, now_ms, printing, theme,
 };
 
 impl SheetApp {
@@ -205,6 +205,30 @@ impl SheetApp {
             "options.highlightActiveRow" => {
                 self.ui.highlight_active_row = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.highlight_active_row);
                 Ok(json!({"on": self.ui.highlight_active_row}))
+            }
+            "options.accentColor" => {
+                // `{"value": "107C41"}` (a leading # is fine); `{"value": "default"}` restores Excel
+                // green; no value reads it.
+                if let Some(v) = p.get("value").or_else(|| p.get("color")) {
+                    let accent = match v.as_str() {
+                        Some(s) if s.eq_ignore_ascii_case("default") => Some(theme::AccentColor::DEFAULT),
+                        Some(s) => theme::AccentColor::parse(s),
+                        None => None,
+                    };
+                    let Some(accent) = accent else {
+                        return Some(Err("unknown accent colour; use a six-digit hexadecimal colour such as 107C41".into()));
+                    };
+                    self.ui.accent_color = accent;
+                }
+                Ok(json!({"accentColor": self.ui.accent_color.hex()}))
+            }
+            "options.showDiscord" => {
+                self.ui.show_discord = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.show_discord);
+                Ok(json!({"on": self.ui.show_discord}))
+            }
+            "options.showAccountPicture" => {
+                self.ui.show_account_picture = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.show_account_picture);
+                Ok(json!({"on": self.ui.show_account_picture}))
             }
             "view.interfaceScale" => {
                 // `{"percent": 125}` or `{"percent": "auto"}`; out-of-range values are clamped.
