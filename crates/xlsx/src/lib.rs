@@ -18,6 +18,7 @@ mod chartex;
 mod controls;
 mod crypto;
 mod csv;
+mod custom_property;
 mod drawing;
 mod feature_bags;
 mod fmla;
@@ -49,6 +50,7 @@ use gridcraft_model::Workbook;
 
 pub use crypto::{DecryptError, check_encryption, decrypt};
 pub use csv::{MAX_CSV_BYTES, decode_text, read_csv, read_csv_with_report, write_csv, write_csv_limited};
+pub use custom_property::{custom_property, custom_property_in, remove_custom_property, set_custom_property};
 pub use ods::read_ods;
 pub use package::MAX_PART;
 pub use passthrough::rebase_links;

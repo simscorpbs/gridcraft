@@ -25,6 +25,7 @@ pub mod slicer;
 pub mod solver;
 pub mod spelling;
 pub mod stash;
+pub mod versions;
 pub mod view;
 pub mod whatif;
 
@@ -164,6 +165,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         let mut v = Vec::new();
         v.extend(file::specs());
         v.extend(cloud::specs());
+        v.extend(versions::specs());
         v.extend(edit::specs());
         v.extend(format::specs());
         v.extend(sheet::specs());

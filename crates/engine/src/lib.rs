@@ -26,6 +26,8 @@ pub mod record;
 pub mod sample;
 pub mod selection;
 pub mod tables;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod versions;
 pub mod windows;
 
 use std::sync::Arc;
@@ -235,6 +237,10 @@ pub struct DocState {
     /// A conflict AutoSave found and nobody has resolved yet: the file `changed` or went
     /// `missing`. AutoSave does not write while one waits.
     pub conflict: Option<gridcraft_cloud::DiskState>,
+    /// What the version history knows about this workbook: the id its file carries and when this
+    /// editing session began ([`versions`]).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub history: versions::DocHistory,
 }
 
 static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -344,6 +350,8 @@ impl DocState {
             autosave: true,
             stamp: None,
             conflict: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            history: versions::DocHistory { id: None, opened_at: versions::now_unix() },
         }
     }
     pub fn is_dirty(&self) -> bool {
@@ -415,6 +423,13 @@ pub struct Prefs {
     /// File ▸ Options ▸ Save ▸ Turn on AutoSave by default: whether AutoSave is on for files with
     /// no choice of their own ([`autosave`]). On by default.
     pub autosave_by_default: bool,
+    /// File ▸ Options ▸ Save ▸ Version history folder: where the version history is kept instead
+    /// of the settings folder (`None`: the settings folder alone). See [`versions`].
+    pub versions_folder: Option<String>,
+    /// With `versions_folder`: keep the history in the settings folder too, and write both.
+    pub versions_mirror: bool,
+    /// The device name versions record (`None`: the system's, such as Windows or Mac).
+    pub device_label: Option<String>,
 }
 
 /// The selection statistics shown on the status bar, set with `view.statusBar`. Excel turns on
@@ -451,6 +466,9 @@ impl Default for Prefs {
             status_bar: StatusBarStats::default(),
             recent_functions: recent::defaults(),
             autosave_by_default: true,
+            versions_folder: None,
+            versions_mirror: false,
+            device_label: None,
         }
     }
 }
@@ -559,6 +577,10 @@ pub struct Session {
     /// a changed workbook write it first ([`Session::autosave_before_discard`]); headless sessions
     /// (CLI, MCP, scripts) keep refusing to close a changed workbook until it is saved.
     pub autosave_host: bool,
+    /// The local version history (File › Info › Version History), once the host has started it
+    /// ([`Session::enable_versions`]); headless sessions and tests keep none unless they ask.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) version_store: Option<versions::Versions>,
 }
 
 impl Session {

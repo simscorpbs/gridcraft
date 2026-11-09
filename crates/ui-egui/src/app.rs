@@ -158,6 +158,9 @@ impl SheetApp {
             self.session.cloud_roots = roots;
             self.cloud_discovery = None;
         }
+        // The version history's worker finished writing (the history is written in the background).
+        #[cfg(not(target_arch = "wasm32"))]
+        self.session.versions_tick();
         self.autosave(ctx);
         self.update_title(ctx);
         self.request_hidden_paint(ctx);

@@ -903,6 +903,11 @@ fn script_sandbox_check(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Whether file access is allowed on this thread (not inside a script that may not touch files).
+pub(crate) fn file_access_allowed(path: &str) -> bool {
+    script_sandbox_check(path).is_ok()
+}
+
 /// The largest native file the reader still touches: its own cap plus one, used to stop
 /// reads whose bytes arrive faster than metadata can claim (device files, growing files).
 #[cfg(not(target_arch = "wasm32"))]

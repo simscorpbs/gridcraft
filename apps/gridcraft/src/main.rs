@@ -398,6 +398,16 @@ fn main() -> eframe::Result<()> {
                     let ctx = cc.egui_ctx.clone();
                     app.discover_cloud(std::sync::Arc::new(move || ctx.request_repaint()));
                 }
+                // The version history of saved workbooks, one folder per document under the
+                // settings folder (or the folders File > Options > Save names).
+                if prefs_enabled()
+                    && let Some(dir) = config_dir()
+                {
+                    let ctx = cc.egui_ctx.clone();
+                    if let Err(e) = app.session.enable_versions(dir.join("versions"), std::sync::Arc::new(move || ctx.request_repaint())) {
+                        log::warn!("no version history: {e}");
+                    }
+                }
                 if let Some(port) = control_port {
                     match control_server::start(port, control_token.clone(), cc.egui_ctx.clone()) {
                         Ok(rx) => app.control_rx = Some(rx),

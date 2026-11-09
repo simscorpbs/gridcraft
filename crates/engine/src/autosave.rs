@@ -364,13 +364,23 @@ impl Session {
     /// version another device or program saved meanwhile is never overwritten. The active
     /// workbook stays active. A workbook AutoSave does not cover is left alone.
     pub fn autosave_write(&mut self, uid: u64) -> std::result::Result<AutoSaveWrite, String> {
+        self.autosave_write_for(uid, None)
+    }
+
+    /// [`Session::autosave_write`] for a reason: `close` is the last write before the workbook
+    /// closes, which the version history records as the trigger of that version.
+    pub fn autosave_write_for(&mut self, uid: u64, trigger: Option<&str>) -> std::result::Result<AutoSaveWrite, String> {
         let Some(index) = self.document_index(uid) else { return Ok(AutoSaveWrite::NotCovered) };
         if !self.autosave_covers(uid) {
             return Ok(AutoSaveWrite::NotCovered);
         }
         let previous = self.active_uid();
         self.active = index;
-        let result = self.run("file.save", serde_json::json!({"ifUnchanged": true}));
+        let mut params = serde_json::json!({"ifUnchanged": true});
+        if let Some(trigger) = trigger {
+            params["trigger"] = serde_json::json!(trigger);
+        }
+        let result = self.run("file.save", params);
         if let Some(back) = previous.and_then(|p| self.document_index(p)) {
             self.active = back;
         }

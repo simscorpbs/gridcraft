@@ -75,7 +75,7 @@ pub fn local_offset_secs_at(ms: f64) -> i64 {
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let date = js_sys::Date::new(&js_sys::JsValue::from_f64(ms));
+        let date = js_sys::Date::new(&ms.into());
         -(date.get_timezone_offset() * 60.0).round() as i64
     }
 }
