@@ -5,6 +5,11 @@
 pub(super) fn translate(text: &str) -> Option<&'static str> {
     Some(match text {
         "Paste" => "Colar",
+        "Paste All" => "Colar Tudo",
+        "Clipboard" => "Área de Transferência",
+        "Click an item to paste it." => "Clique em um item para colá-lo.",
+        "Nothing collected yet. Items you copy or cut appear here." => "Nada coletado ainda. Os itens que você copiar ou recortar aparecem aqui.",
+        "(blank cells)" => "(células em branco)",
         "Paste Values" => "Colar Valores",
         "Paste Formulas" => "Colar Fórmulas",
         "Paste Formatting" => "Colar Formatação",

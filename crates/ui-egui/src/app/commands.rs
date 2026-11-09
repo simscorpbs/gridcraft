@@ -163,6 +163,18 @@ impl SheetApp {
                 self.ui.ribbon_tab = p.get("tab").and_then(Json::as_str).unwrap_or("Home").to_string();
                 Ok(Json::Null)
             }
+            "ui.clipboardPane" => {
+                // `{"on": true}` opens the Clipboard pane (Home › Clipboard dialog launcher), `{"on": false}`
+                // closes it; without `on` it switches. It replaces another task pane.
+                let shown = self.grid.pane.as_deref() == Some(crate::clipboard_pane::PANE);
+                let want = p.get("on").and_then(Json::as_bool).unwrap_or(!shown);
+                if want {
+                    crate::clipboard_pane::open_pane(self);
+                } else if shown {
+                    self.grid.pane = None;
+                }
+                Ok(json!({"on": want, "count": self.session.clip_history.len()}))
+            }
             "view.collapseRibbon" => {
                 self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed;
                 Ok(Json::Null)

@@ -1,6 +1,6 @@
 use super::controls::{
-    ComboResult, act, active_style, anchor_keytip, control_keytip, editable_combo, invoke, keytip, list_combo, menu_items, popup_command, sep,
-    theme_colors,
+    ComboResult, act, active_style, anchor_keytip, control_keytip, editable_combo, invoke, keytip, launcher, list_combo, menu_items, popup_command,
+    sep, theme_colors,
 };
 use super::galleries::{cell_style_gallery, table_gallery};
 use super::{
@@ -102,6 +102,13 @@ pub(super) fn home(app: &mut SheetApp, ui: &mut Ui) {
             } else {
                 act(app, "edit.formatPainter", json!({}));
             }
+        }
+    });
+    // The group's dialog launcher opens the Clipboard task pane.
+    ui.vertical(|ui| {
+        ui.add_space(54.0);
+        if launcher(ui, "Clipboard").clicked() {
+            act(app, "ui.clipboardPane", json!({}));
         }
     });
     sep(ui);

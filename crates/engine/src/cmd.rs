@@ -142,6 +142,10 @@ pub fn can_redo(s: &Session) -> std::result::Result<(), String> {
 fn not_grouping(s: &Session) -> std::result::Result<(), String> {
     if s.active().is_some_and(|d| s.in_group(d.uid)) { Err("finish or stop the running action first (automate.stopAction)".into()) } else { Ok(()) }
 }
+pub fn has_clip_history(s: &Session) -> std::result::Result<(), String> {
+    has_doc(s)?;
+    if s.clip_history.is_empty() { Err("the Clipboard pane is empty".into()) } else { Ok(()) }
+}
 pub fn has_clipboard(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
     if s.clipboard.is_some() { Ok(()) } else { Err("the clipboard is empty".into()) }

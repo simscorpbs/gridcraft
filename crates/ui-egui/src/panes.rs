@@ -1,4 +1,4 @@
-//! Right-hand task panes: Comments, Watch Window, Selection Pane, Format Chart, Version History.
+//! Right-hand task panes: Comments, Watch Window, Selection Pane, Format Chart, Version History, Clipboard.
 
 use egui::{Color32, Ui, vec2};
 use serde_json::{Value as Json, json};
@@ -30,6 +30,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                 "selection" => "Selection",
                 "formatChart" => "Format Chart Area",
                 crate::versions_pane::PANE => "Version History",
+                crate::clipboard_pane::PANE => "Clipboard",
                 _ => "",
             };
             ui.label(egui::RichText::new(app.ui.language.tr(title)).font(theme::ui_bold(15.0)));
@@ -49,6 +50,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             "selection" => selection(app, ui),
             "formatChart" => format_chart(app, ui),
             crate::versions_pane::PANE => crate::versions_pane::content(app, ui),
+            crate::clipboard_pane::PANE => crate::clipboard_pane::content(app, ui),
             _ => {}
         });
     });
